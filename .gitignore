@@ -1,0 +1,15 @@
+runtime/
+tmp/
+*.log
+*.pid
+*.pid.*
+.DS_Store
+clog.md
+log.md
+规划补充/
+开发交接与验收_v0.1.md
+需求讨论记录.md
+美术方向讨论.md
+tools/qa-formation-fixture.mjs
+tools/batch-b-balance-report.mjs
+**/save*.json
