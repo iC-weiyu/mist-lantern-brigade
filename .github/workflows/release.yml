@@ -1,13 +1,17 @@
 name: Release
 
-# 推送 v* 标签时自动发版：打包一个解压即可运行的 ZIP，并创建对应的 Release。
+# 推送 v* 标签时自动发版：打包一个解压即可运行的 ZIP，并创建（或更新）对应的 Release。
 # 以后要发新版：改好代码 → git push → git tag -a v0.3.0 -m "说明" → git push origin v0.3.0
 # Release 正文取自 .github/release-notes.md，发版前记得更新它（没有该文件时自动用提交记录生成）。
+#
+# 附件名与压缩包内的目录名一律用 ASCII：GitHub 的 Linux runner 在非 UTF-8 locale 下会丢掉中文，
+# 中文只保留在压缩包内的文件名（git archive 按字节写入，不受 locale 影响）。
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,6 +19,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      ASSET: mist-lantern-brigade-${{ github.ref_name }}.zip
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -22,19 +29,35 @@ jobs:
       - name: 打包 ZIP（只含纳入版本控制的文件，不含存档与日志）
         run: |
           set -e
-          name="雾灯旅团-${GITHUB_REF_NAME}"
           mkdir -p dist
-          git archive --format=zip --prefix="${name}/" -o "dist/${name}.zip" HEAD
+          git archive --format=zip --prefix="mist-lantern-brigade-${TAG}/" -o "dist/${ASSET}" HEAD
           ls -lh dist/
-          unzip -l "dist/${name}.zip" | tail -6
+          unzip -l "dist/${ASSET}" | tail -6
 
-      - name: 创建 Release 并附上 ZIP
+      - name: 创建或更新 Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           notes="--generate-notes"
           if [ -f .github/release-notes.md ]; then notes="--notes-file .github/release-notes.md"; fi
-          gh release create "${GITHUB_REF_NAME}" dist/*.zip \
-            --title "雾灯旅团 ${GITHUB_REF_NAME}" \
-            $notes
+          title="雾灯旅团 ${TAG}"
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} 已存在，改为更新。"
+          else
+            gh release create "${TAG}" --title "${title}" $notes
+          fi
+
+          gh release upload "${TAG}" "dist/${ASSET}" --clobber
+          gh release edit "${TAG}" --title "${title}" $notes --draft=false
+
+          # 清掉历史遗留的、名字不对的旧附件
+          gh release view "${TAG}" --json assets --jq '.assets[].name' | while read -r name; do
+            if [ -n "${name}" ] && [ "${name}" != "${ASSET}" ]; then
+              echo "删除旧附件：${name}"
+              gh release delete-asset "${TAG}" "${name}" --yes || true
+            fi
+          done
+
+          gh release view "${TAG}" --json tagName,name,isDraft,assets

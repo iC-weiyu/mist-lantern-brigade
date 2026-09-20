@@ -19,7 +19,7 @@
 ## 怎么玩（给朋友）
 
 1. 装 Node.js 20 或更高版本：<https://nodejs.org/zh-cn/download>，一路默认安装。
-2. 下载本 Release 的 `雾灯旅团-v0.2.0.zip`（或仓库页面 Code → Download ZIP），**完整解压**到可写目录。
+2. 下载本 Release 的 `mist-lantern-brigade-v0.2.0.zip`（或仓库页面 Code → Download ZIP），**完整解压**到可写目录。
 3. 双击 `【双击启动】雾灯旅团.cmd` → 浏览器自动打开初始界面 → 点「新建存档」开始。
 
 - 不要只打开 `public/index.html`，也不要在压缩包里直接双击。
