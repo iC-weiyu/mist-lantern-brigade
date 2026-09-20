@@ -1,0 +1,4 @@
+# Windows 启动器必须是 CRLF 且原样入库：
+# 用 ZIP 下载时 GitHub 直接打包仓库里的内容，若被规范成 LF，.cmd 的多行 if 块会出错。
+*.cmd -text
+*.ps1 -text

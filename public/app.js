@@ -26,6 +26,20 @@ let gachaMode = localStorage.getItem('mist-gacha-mode') || (systemReduceMotion ?
 let gachaSound = localStorage.getItem('mist-gacha-sound') !== 'off';
 let gachaReduceMotion = localStorage.getItem('mist-gacha-reduce') === 'true' || systemReduceMotion;
 let audioContext = null;
+let rainEnabled = localStorage.getItem('mist-rain') !== 'off';
+let bgmEnabled = localStorage.getItem('mist-bgm') !== 'off';
+let bgmVolume = Number(localStorage.getItem('mist-bgm-volume') ?? 55);
+if (!Number.isFinite(bgmVolume) || bgmVolume < 0 || bgmVolume > 100) bgmVolume = 55;
+let hallMusic = null;
+let hallMusicState = 'idle';   // idle：未检查 | probing：检查中 | ready：已载入 | missing：没有文件
+let hallMusicGapTimer = null;
+let rainAudio = null;
+let rainFadeTimer = null;
+let rainUnlockBound = false;
+let rainActive = false;
+let thunderTimer = null;
+let thunderFlashTimer = null;
+let titleFocusSelector = null;
 let collectionSearch = '';
 let collectionRarity = 'all';
 let collectionRole = 'all';
@@ -56,6 +70,10 @@ let equipmentTargetId = null;
 let equipmentOtherOpen = false;
 let equipmentSelection = null;
 let equipmentDrag = null;
+let titlePanel = null;      // 初始界面内的存档面板：null | 'slots'
+let newSaveSlotId = null;   // “新建存档”命名弹窗锁定的档位
+let quitConfirm = false;    // “退出游戏”确认弹窗
+let quitState = false;      // 已退出：停雨声并显示告别画面
 
 const pageTitles = {
   workbench: ['测试工作台', '独立沙盒'],
@@ -186,10 +204,8 @@ function pendingGachaResults() {
 
 function ensureAudio() {
   if (!gachaSound) return;
-  try {
-    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') audioContext.resume();
-  } catch { audioContext = null; }
+  const context = getAudioContext(); if (!context) return;
+  if (context.state === 'suspended') context.resume().catch(() => {});
 }
 
 function chime(kind) {
@@ -206,6 +222,291 @@ function chime(kind) {
     oscillator.start(now + index * .055); oscillator.stop(now + index * .055 + .36);
   });
 }
+
+/* ── 程序合成的环境音：初始界面（雨·风·雷），不依赖任何外部音频素材 ──
+   会馆背景乐不在这里，它由 public/assets/hall-bgm.mp3 播放，见下方 syncHallMusic。 */
+const AMBIENT_LEVEL = 0.07;
+
+function audioSupported() { return Boolean(window.AudioContext || window.webkitAudioContext); }
+
+// 全局共用一个 AudioContext，避免浏览器上下文数量上限，也让雨声与背景乐各自独立淡入淡出。
+function getAudioContext() {
+  if (!audioSupported()) return null;
+  try { audioContext ||= new (window.AudioContext || window.webkitAudioContext)(); return audioContext; } catch { audioContext = null; return null; }
+}
+
+// 棕噪声打底 + 少量白噪声：低通后听感偏“闷”，接近雾里隔着一层的小雨。
+function noiseBuffer(ctx, seconds = 4) {
+  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  let brown = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    const white = Math.random() * 2 - 1;
+    brown = (brown + 0.02 * white) / 1.02;
+    data[i] = brown * 3.5 + white * 0.3;
+  }
+  return buffer;
+}
+
+function buildRainAudio() {
+  const ctx = getAudioContext(); if (!ctx) return null;
+  const buffer = noiseBuffer(ctx);
+  const master = ctx.createGain(); master.gain.value = 0.0001; master.connect(ctx.destination);
+
+  const bed = ctx.createBufferSource(); bed.buffer = buffer; bed.loop = true;
+  const bedFilter = ctx.createBiquadFilter(); bedFilter.type = 'lowpass'; bedFilter.frequency.value = 520; bedFilter.Q.value = 0.7;
+  const bedGain = ctx.createGain(); bedGain.gain.value = 0.85;
+  bed.connect(bedFilter).connect(bedGain).connect(master);
+
+  const drizzle = ctx.createBufferSource(); drizzle.buffer = buffer; drizzle.loop = true;
+  const drizzleFilter = ctx.createBiquadFilter(); drizzleFilter.type = 'bandpass'; drizzleFilter.frequency.value = 1300; drizzleFilter.Q.value = 0.5;
+  const drizzleGain = ctx.createGain(); drizzleGain.gain.value = 0.16;
+  drizzle.connect(drizzleFilter).connect(drizzleGain).connect(master);
+
+  const hiss = ctx.createBufferSource(); hiss.buffer = buffer; hiss.loop = true;
+  const hissFilter = ctx.createBiquadFilter(); hissFilter.type = 'bandpass'; hissFilter.frequency.value = 3400; hissFilter.Q.value = 0.9;
+  const hissGain = ctx.createGain(); hissGain.gain.value = 0.035;
+  hiss.connect(hissFilter).connect(hissGain).connect(master);
+
+  // 风：低通噪声打底，再叠两层极慢的阵风起伏，只有呼与吸，不出现尖啸。
+  const wind = ctx.createBufferSource(); wind.buffer = buffer; wind.loop = true;
+  const windFilter = ctx.createBiquadFilter(); windFilter.type = 'lowpass'; windFilter.frequency.value = 420; windFilter.Q.value = 0.9;
+  const windGain = ctx.createGain(); windGain.gain.value = 0.16;
+  wind.connect(windFilter).connect(windGain).connect(master);
+
+  const gust = ctx.createOscillator(); gust.type = 'sine'; gust.frequency.value = 0.037;
+  const gustDepth = ctx.createGain(); gustDepth.gain.value = 0.09;
+  gust.connect(gustDepth).connect(windGain.gain);
+  const gustSlow = ctx.createOscillator(); gustSlow.type = 'sine'; gustSlow.frequency.value = 0.011;
+  const gustSlowDepth = ctx.createGain(); gustSlowDepth.gain.value = 0.06;
+  gustSlow.connect(gustSlowDepth).connect(windGain.gain);
+
+  // 屋檐间的气声，比雨更轻，负责“远处有风”的层次。
+  const breeze = ctx.createBufferSource(); breeze.buffer = buffer; breeze.loop = true;
+  const breezeFilter = ctx.createBiquadFilter(); breezeFilter.type = 'bandpass'; breezeFilter.frequency.value = 760; breezeFilter.Q.value = 0.6;
+  const breezeGain = ctx.createGain(); breezeGain.gain.value = 0.05;
+  breeze.connect(breezeFilter).connect(breezeGain).connect(master);
+  const breezeDrift = ctx.createOscillator(); breezeDrift.type = 'sine'; breezeDrift.frequency.value = 0.023;
+  const breezeDriftDepth = ctx.createGain(); breezeDriftDepth.gain.value = 240;
+  breezeDrift.connect(breezeDriftDepth).connect(breezeFilter.frequency);
+
+  // 极慢的雨势起伏：像隔着雾一样忽远忽近。
+  const swell = ctx.createOscillator(); swell.type = 'sine'; swell.frequency.value = 0.05;
+  const swellDepth = ctx.createGain(); swellDepth.gain.value = 150;
+  swell.connect(swellDepth).connect(bedFilter.frequency);
+
+  bed.start(); drizzle.start(); hiss.start(); wind.start(); breeze.start(); swell.start(); gust.start(); gustSlow.start(); breezeDrift.start();
+  return { ctx, buffer, master, timer: null };
+}
+
+// 偶尔落下的雨点，让“淅淅”有一点颗粒感。
+function rainDroplet() {
+  if (!rainAudio || rainAudio.ctx.state !== 'running') return;
+  const { ctx, buffer, master } = rainAudio;
+  const now = ctx.currentTime;
+  const source = ctx.createBufferSource(); source.buffer = buffer; source.playbackRate.value = 1.4 + Math.random() * 1.4;
+  const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 1400 + Math.random() * 2800; filter.Q.value = 3.5;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.018 + Math.random() * 0.012, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1 + Math.random() * 0.08);
+  source.connect(filter).connect(gain).connect(master);
+  source.start(now, Math.random() * 3, 0.24);
+  source.stop(now + 0.26);
+}
+
+// 闷雷：慢起音、长衰减、被压到很低的低频，只当背景里的远处滚动。
+function strikeThunder() {
+  if (!rainAudio || rainAudio.ctx.state !== 'running') return;
+  const { ctx, buffer, master } = rainAudio;
+  const now = ctx.currentTime;
+  const attack = 0.45 + Math.random() * 0.6;
+  const hold = 0.6 + Math.random() * 0.9;
+  const release = 2.6 + Math.random() * 2.8;
+  const layers = [
+    { peak: 0.05 + Math.random() * 0.04, cutoff: 150 + Math.random() * 70, rate: 0.55, offset: 0, length: 1 },
+    { peak: 0.03, cutoff: 95, rate: 0.35, offset: 0.8 + Math.random() * 0.9, length: 1.5 },
+  ];
+  layers.forEach((layer) => {
+    const start = now + layer.offset;
+    const source = ctx.createBufferSource(); source.buffer = buffer; source.loop = true; source.playbackRate.value = layer.rate;
+    const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = layer.cutoff; filter.Q.value = 1.1;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(layer.peak, start + attack * layer.length);
+    gain.gain.linearRampToValueAtTime(layer.peak * 0.7, start + attack * layer.length + hold * layer.length);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + (attack + hold + release) * layer.length);
+    source.connect(filter).connect(gain).connect(master);
+    source.start(start, Math.random() * 3);
+    source.stop(start + (attack + hold + release) * layer.length + 0.4);
+  });
+  flashThunder(attack + hold + 0.5);
+}
+
+// 伴随闷雷的一次很轻的画面提亮。
+function flashThunder(seconds) {
+  if (systemReduceMotion) return;
+  const screen = document.querySelector('.title-screen');
+  if (!screen) return;
+  screen.classList.add('thunder-strike');
+  clearTimeout(thunderFlashTimer);
+  thunderFlashTimer = setTimeout(() => screen.classList.remove('thunder-strike'), Math.max(700, seconds * 1000));
+}
+
+function scheduleThunder(delay = 6500 + Math.random() * 4500) {
+  clearTimeout(thunderTimer);
+  thunderTimer = setTimeout(() => {
+    if (rainEnabled && !quitState && view === 'title' && !document.hidden && rainAudio?.ctx.state === 'running') {
+      strikeThunder();
+      scheduleThunder(24000 + Math.random() * 42000);
+    } else scheduleThunder(7000);
+  }, delay);
+}
+
+function ensureRainAudio() {
+  if (rainAudio) return rainAudio;
+  if (!rainEnabled || !audioSupported()) return null;
+  rainAudio = buildRainAudio(); if (!rainAudio) return null;
+  rainAudio.timer = setInterval(() => {
+    if (!rainEnabled || document.hidden || !rainAudio || rainAudio.ctx.state !== 'running') return;
+    const drops = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < drops; i += 1) setTimeout(rainDroplet, Math.random() * 500);
+  }, 1100);
+  scheduleThunder();
+  return rainAudio;
+}
+
+function fadeRain(level, seconds = 2.4) {
+  const audio = rainAudio; if (!audio) return;
+  const now = audio.ctx.currentTime;
+  clearTimeout(rainFadeTimer);
+  try { audio.master.gain.cancelScheduledValues(now); } catch { /* 上下文已关闭时忽略 */ }
+  audio.master.gain.setValueAtTime(Math.max(0.0001, audio.master.gain.value), now);
+  audio.master.gain.exponentialRampToValueAtTime(Math.max(0.0001, level), now + seconds);
+}
+
+// 浏览器要求先有一次用户手势才能出声，这里挂一次性解锁。
+function bindAudioUnlock() {
+  if (rainUnlockBound) return;
+  rainUnlockBound = true;
+  const unlock = () => {
+    document.removeEventListener('pointerdown', unlock, true);
+    document.removeEventListener('keydown', unlock, true);
+    if (view === 'title') syncRain(true); else syncBgm(true);
+  };
+  document.addEventListener('pointerdown', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+}
+
+function syncRain(active) {
+  const want = Boolean(active) && rainEnabled && !quitState;
+  if (!want) {
+    if (rainActive) { rainActive = false; fadeRain(0.0001, 0.9); }
+    return;
+  }
+  const audio = ensureRainAudio(); if (!audio) return;
+  const rise = () => { if (rainEnabled && !quitState && view === 'title' && !rainActive) { rainActive = true; fadeRain(AMBIENT_LEVEL); } };
+  if (audio.ctx.state === 'running') rise();
+  else { audio.ctx.resume().then(rise).catch(() => {}); bindAudioUnlock(); }
+}
+
+/* ── 会馆背景乐：优先播放 public/assets/hall-bgm.* 音频文件 ──
+   播完一曲后等待 30 秒再从头播放；离开会馆或回到初始界面时淡出并暂停，再进入时从中断处继续。 */
+const HALL_MUSIC_FILES = ['mp3', 'm4a', 'ogg', 'wav', 'flac'];
+const HALL_MUSIC_GAP_MS = 30_000;
+
+function hallMusicLevel() { return Math.min(1, Math.max(0, bgmVolume / 100)); }
+
+function hallMusicFileName() {
+  return hallMusic ? hallMusic.src.split('/').pop() : '';
+}
+
+function hallMusicStatusText() {
+  if (hallMusicState === 'ready') {
+    const total = Math.round(hallMusic?.duration || 0);
+    const clock = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    return `已载入 ${hallMusicFileName()} · 时长 ${clock}，播完等 30 秒再循环`;
+  }
+  if (hallMusicState === 'missing') return '未找到音频文件：把音乐放到 public/assets/hall-bgm.mp3（.m4a／.ogg／.wav／.flac 也可），会馆内目前没有背景音乐';
+  return '正在检查音频文件……';
+}
+
+// 依次探测候选扩展名，全部 404 就进入 missing。
+function probeHallMusic(index = 0) {
+  const AudioCtor = window.Audio;
+  if (!AudioCtor) { hallMusicState = 'missing'; render(); return; }
+  if (index >= HALL_MUSIC_FILES.length) { hallMusicState = 'missing'; render(); return; }
+  const src = `/assets/hall-bgm.${HALL_MUSIC_FILES[index]}`;
+  const element = new AudioCtor();
+  element.preload = 'auto';
+  element.volume = 0;
+  element.src = src;
+  const settle = (ok) => {
+    element.removeEventListener('loadedmetadata', onLoaded);
+    element.removeEventListener('error', onError);
+    if (!ok) { probeHallMusic(index + 1); return; }
+    element.addEventListener('ended', onHallMusicEnded);
+    hallMusic = { element, src, duration: element.duration || 0, fadeTimer: null, autoPaused: false };
+    hallMusicState = 'ready';
+    render();
+    syncHallMusic(!quitState && view !== 'title');
+  };
+  const onLoaded = () => settle(true);
+  const onError = () => settle(false);
+  element.addEventListener('loadedmetadata', onLoaded, { once: true });
+  element.addEventListener('error', onError, { once: true });
+}
+
+function hallMusicFade(target, seconds = 1.6) {
+  const music = hallMusic; if (!music) return;
+  clearInterval(music.fadeTimer);
+  const from = music.element.volume;
+  const steps = Math.max(1, Math.round(seconds * 20));
+  let step = 0;
+  music.fadeTimer = setInterval(() => {
+    step += 1;
+    music.element.volume = Math.min(1, Math.max(0, from + (target - from) * (step / steps)));
+    if (step < steps) return;
+    clearInterval(music.fadeTimer); music.fadeTimer = null;
+    if (target <= 0.001) music.element.pause();
+  }, 50);
+}
+
+function startHallMusic() {
+  const music = hallMusic; if (!music) return;
+  clearTimeout(hallMusicGapTimer); hallMusicGapTimer = null;
+  if (music.element.ended || (music.duration && music.element.currentTime >= music.duration - 0.1)) music.element.currentTime = 0;
+  music.element.volume = 0;
+  const started = music.element.play();
+  if (started?.catch) started.catch(() => { bindAudioUnlock(); });   // 还没拿到用户手势
+  hallMusicFade(hallMusicLevel(), 2.4);
+}
+
+function stopHallMusic() {
+  clearTimeout(hallMusicGapTimer); hallMusicGapTimer = null;
+  if (hallMusic) hallMusicFade(0, 1.2);
+}
+
+// 一曲放完：等 30 秒再放下一遍。
+function onHallMusicEnded() {
+  if (!bgmEnabled || quitState || view === 'title') return;
+  clearTimeout(hallMusicGapTimer);
+  hallMusicGapTimer = setTimeout(() => {
+    hallMusicGapTimer = null;
+    if (bgmEnabled && !quitState && view !== 'title' && !document.hidden) startHallMusic();
+  }, HALL_MUSIC_GAP_MS);
+}
+
+function syncHallMusic(active) {
+  const want = Boolean(active) && bgmEnabled;
+  if (!want) { stopHallMusic(); return; }
+  if (hallMusicState === 'idle') { hallMusicState = 'probing'; probeHallMusic(); return; }
+  if (hallMusicState !== 'ready') return;
+  if (hallMusic?.element.paused && !hallMusicGapTimer) startHallMusic();
+}
+
+// 只有会馆内才放背景乐：初始界面、退出画面、没有存档时都停下。
+function syncBgm(active) { syncHallMusic(Boolean(active) && !quitState && view !== 'title'); }
 
 function startGachaPresentation(results, { resume = false } = {}) {
   clearGachaTimers();
@@ -456,8 +757,10 @@ async function bootstrap() {
     if (!data.ok) throw new Error(data.error);
     model = data;
     clockOffset = data.serverNow - Date.now();
-    if (!model.save) view = 'slots';
-    else if (['active', 'paused'].includes(model.save.battle?.status)) { view = 'battle'; focusId = model.save.battle.focusId; strategy = model.save.battle.strategy; autoRepeat = Boolean(model.save.repeatSession && model.save.battle.repeatSessionId === model.save.repeatSession.id) || autoRepeat; }
+    // 每次打开或刷新都先落在初始界面；战斗进度在“选择存档”后继续。
+    if (model.save && ['active', 'paused'].includes(model.save.battle?.status)) { focusId = model.save.battle.focusId; strategy = model.save.battle.strategy; autoRepeat = Boolean(model.save.repeatSession && model.save.battle.repeatSessionId === model.save.repeatSession.id) || autoRepeat; }
+    titlePanel = null; newSaveSlotId = null; quitConfirm = false; quitState = false;
+    view = 'title';
     render();
   } catch (error) {
     app.innerHTML = `<main class="boot-state"><div class="lantern-mark"><span></span></div><p class="eyebrow">启动失败</p><h1>会馆的灯没有点亮</h1><p>${esc(error.message)}</p><button class="btn primary" data-action="reload">重试</button></main>`;
@@ -505,6 +808,7 @@ function resetTransientState() {
   clearTimeout(timer); clearGachaTimers(); gachaPresentation = null;
   storyReplay = null; storyDisplayBeat = null; storyArchiveOpen = false; collectionDetailId = null;
   deleteSlotId = null;
+  titlePanel = null; newSaveSlotId = null; quitConfirm = false; quitState = false;
   focusId = null; strategy = 'balanced'; pool = 'beginner'; autoRepeat = false;
   sessionStorage.setItem('mist-auto-repeat', 'false'); view = 'home';
   equipmentTargetId = null; equipmentOtherOpen = false; equipmentSelection = null; equipmentDrag = null;
@@ -570,14 +874,14 @@ app.addEventListener('pointerup', (event) => {
 });
 app.addEventListener('pointercancel', cancelFormationDrag);
 
-async function switchSave(targetSlotId, create = false) {
+async function switchSave(targetSlotId, create = false, name = null) {
   if (pending) return;
   if (model?.save?.battle && ['active', 'paused'].includes(model.save.battle.status)) await act('battle_abandon', { reason: '切换存档' }, { quiet: true });
-  const name = document.querySelector(`[data-slot-name="${targetSlotId}"]`)?.value || '';
+  const slotName = name ?? document.querySelector(`[data-slot-name="${targetSlotId}"]`)?.value ?? '';
   pending = true; clearTimeout(timer);
   try {
     const response = await fetch('/api/slots', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Id': clientId },
-      body: JSON.stringify({ operation: create ? 'create' : 'select', targetSlotId, name, slotId: model.activeSlotId, selectionToken: model.selectionToken }) });
+      body: JSON.stringify({ operation: create ? 'create' : 'select', targetSlotId, name: slotName, slotId: model.activeSlotId, selectionToken: model.selectionToken }) });
     const data = await response.json(); if (!data.ok) throw new Error(data.error);
     resetTransientState(); Object.assign(model, data); if (targetSlotId === 'test') view = 'workbench'; clockOffset = data.serverNow - Date.now(); render();
     toast(create ? '新旅团已经建立，从第一段故事开始。' : '已切换存档');
@@ -596,7 +900,9 @@ async function deleteSaveSlot() {
       body: JSON.stringify({ operation: 'delete', targetSlotId, confirmed, slotId: model.activeSlotId, selectionToken: model.selectionToken }) });
     const data = await response.json(); if (!data.ok) throw new Error(data.error);
     localStorage.removeItem(`mist-gacha-reveal-v4-slot-${targetSlotId}`);
-    resetTransientState(); Object.assign(model, data); clockOffset = data.serverNow - Date.now(); view = 'slots';
+    const fromTitle = view === 'title';
+    resetTransientState(); Object.assign(model, data); clockOffset = data.serverNow - Date.now();
+    if (fromTitle) { view = 'title'; titlePanel = 'slots'; } else view = 'slots';
     successMessage = data.save ? `存档 ${targetSlotId} 已删除，已切换到另一份旅程。` : `存档 ${targetSlotId} 已删除，现在可以建立新旅程。`;
   } catch (error) { toast(error.message, true); }
   finally {
@@ -613,7 +919,7 @@ function toast(message, error = false) {
 
 function nav() {
   const links = [
-    ['home', '⌂', '会馆'], ['battle', '◇', '冒险'], ['recruit', '✦', '招募'], ['roster', '♙', '角色'], ['collection', '◈', '图鉴'], ['equipment', '▣', '装备'], ['slots', '▤', '选择存档'], ['settings', '⚙', '设置'],
+    ['home', '⌂', '会馆'], ['battle', '◇', '冒险'], ['recruit', '✦', '招募'], ['roster', '♙', '角色'], ['collection', '◈', '图鉴'], ['equipment', '▣', '装备'], ['settings', '⚙', '设置'],
   ];
   if (model.activeSlotId === 'test') links.splice(6, 0, ['workbench', '⚒', '测试工作台']);
   return `<aside class="sidebar"><div class="brand"><div class="seal">雾</div><div><strong>雾灯旅团</strong><small>MIST LANTERN</small></div></div>
@@ -725,7 +1031,7 @@ function battleFormationView(battle) {
 
 function wishSelect(value, index, kind) {
   const standard = model.content.characters.filter((c) => c.pool === 'standard');
-  return `<div class="form-row"><label>心愿格 ${index + 1}</label><select data-wish="${index}" data-wish-kind="${kind}"><option value="">留空，概率回普通通道</option>${standard.map((c) => `<option value="${c.id}" ${value === c.id ? 'selected' : ''}>${esc(c.name)} · ${esc(c.title)}</option>`).join('')}</select></div>`;
+  return `<div class="form-row"><label>心愿格 ${index + 1}</label><select data-wish="${index}" data-wish-kind="${kind}"><option value="">随机 · 来者不拒</option>${standard.map((c) => `<option value="${c.id}" ${value === c.id ? 'selected' : ''}>${esc(c.name)} · ${esc(c.title)}</option>`).join('')}</select></div>`;
 }
 
 function recruitView() {
@@ -890,9 +1196,9 @@ function equipmentView() {
   return `<div class="section-head"><div><h2>行装室 · ${model.save.equipment.length}/1000</h2><p>装备页使用已保存的五人队伍；换装作用于下一场战斗${model.equipmentState?.battleUsesOpeningSnapshot ? '，当前战斗仍保留开场快照' : ''}。</p></div><span class="tag">同一实例不可同时穿给多人</span></div><section class="equipment-party-sticky"><div class="section-head"><div><p class="eyebrow">已保存上场伙伴</p><h3>固定四槽 · 点击伙伴切换目标</h3></div><button class="btn small ghost" data-action="toggle-equipment-others" aria-expanded="${equipmentOtherOpen}">其他伙伴 ${otherIds.length ? `（${otherIds.length}）` : ''}</button></div><div class="equipment-party-grid">${party.map((id) => renderMember(id, true)).join('')}</div>${equipmentOtherOpen ? `<div class="equipment-other-picker" role="list" aria-label="其他伙伴">${otherIds.length ? otherIds.map((id) => `<button class="equipment-other-button ${equipmentTargetId === id ? 'active' : ''}" data-equipment-target="${id}">${esc(char(id)?.name || id)} <small>${esc(char(id)?.rarity || 'R')} · ${equipmentInfo(id)?.equipmentIds?.length || 0}/4 槽</small></button>`).join('') : '<span class="fine">暂无替补伙伴。</span>'}</div>` : ''}${!party.includes(equipmentTargetId) && equipmentTargetId ? `<div class="equipment-alt-target">${renderMember(equipmentTargetId)}</div>` : ''}</section><section class="equipment-workspace"><div class="equipment-library card"><div class="section-head"><div><p class="eyebrow">装备库</p><h3>拖到目标槽，或点选后再点槽</h3></div><label class="equipment-check"><input type="checkbox" data-equipment-unworn-first ${equipmentUnwornFirst ? 'checked' : ''}> 未穿戴优先</label></div><div class="equipment-filters"><div class="filter-tabs" role="tablist" aria-label="装备类型">${[['all','全部'], ...equipmentSlots.map((slot) => [slot, equipmentSlotName(slot)])].map(([value,label]) => `<button class="filter-tab ${equipmentSlotFilter === value ? 'active' : ''}" data-equipment-slot-filter="${value}" role="tab" aria-selected="${equipmentSlotFilter === value}">${label}</button>`).join('')}</div><select data-equipment-rarity aria-label="品质筛选"><option value="all">全部品质</option>${['精良','史诗','传说'].map((value) => `<option value="${value}" ${equipmentRarityFilter === value ? 'selected' : ''}>${value}</option>`).join('')}</select><select data-equipment-set aria-label="套装筛选"><option value="all">全部套装</option>${model.content.equipmentSets.map((set) => `<option value="${set.id}" ${equipmentSetFilter === set.id ? 'selected' : ''}>${esc(set.name)}</option>`).join('')}</select></div><div class="equipment-library-list">${sorted.length ? sorted.map(renderLibraryItem).join('') : '<div class="empty-state"><strong>没有符合条件的装备</strong>试试放宽筛选条件。</div>'}</div></div>${preview}</section><section class="section grid two"><article class="card"><h3>强化与随机副词条</h3><p class="fine">完整强化、回退与定向重铸尚未接入本轮；本页不会假算这些效果。</p><span class="tag">本批不施工</span></article><article class="card"><h3>套装注册表</h3><p class="fine">12 套已被内容校验器读取；套装 2/4 件机制尚未实装，不会计入属性差值。</p><span class="tag">12 / 12 已注册</span></article></section>`;
 }
 
-function slotsView() {
+function slotsView({ embedded = false } = {}) {
   const current = currentSlot();
-  return `<section class="section-head"><div><p class="eyebrow">旅团手记</p><h2>从哪一段旅程继续？</h2><p>${current ? `当前：${esc(current.name)}。` : '当前没有存档。'}三个位置分别保存角色、资源、剧情与免费招募次数。</p></div><button class="btn ghost" data-action="reload">刷新存档列表</button></section>
+  return `${embedded ? '' : `<section class="section-head"><div><p class="eyebrow">旅团手记</p><h2>从哪一段旅程继续？</h2><p>${current ? `当前：${esc(current.name)}。` : '当前没有存档。'}三个位置分别保存角色、资源、剧情与免费招募次数。</p></div><button class="btn ghost" data-action="reload">刷新存档列表</button></section>`}
     <section class="save-slots">${model.slots.map((slot) => {
       const active = slot.id === model.activeSlotId;
       const disabled = pending || model.mode !== 'writer';
@@ -940,9 +1246,10 @@ async function updateFreeClock() {
 
 function settingsView() {
   const current = currentSlot();
-  return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><input type="file" accept="application/json" data-import hidden></div></section>
+  return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><button class="btn ghost" data-action="back-to-title">返回初始界面</button><input type="file" accept="application/json" data-import hidden></div></section>
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
+    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><p class="fine">初始界面环境音由浏览器实时合成；会馆背景乐播放 public/assets/hall-bgm.mp3，一曲放完静置 30 秒再循环。受自动播放限制，首次点击或按键后才会出声。</p><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音（雨 · 风 · 雷）</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}</div>
     <section class="section card"><div class="section-head"><div><h2>版本范围</h2><p>把已实现与后续内容明确分开。</p></div><span class="tag gold">v0.1 playable slice</span></div><ul class="status-list"><li><span>M0 · 42 SSR / 48 SR / 72 R / 12 套装统一注册与校验</span><span class="tag green">已实现</span></li><li><span>图鉴 · 162 人、收藏持久化、搜索筛选、NEW 与详情预览</span><span class="tag green">已实现</span></li><li><span>M1 · 五人行动条、P/A/U、护盾/治疗/持续伤害、集火、策略、暂停、1/2/3×</span><span class="tag green">已实现</span></li><li><span>M2 · 三池规则、心愿、软保底、里程碑、重复凭证、突破/回收、编队、等级、掉落穿戴</span><span class="tag green">可玩切片</span></li><li><span>M2 · 装备强化/重铸、完整碎片商品交互、等级重置</span><span class="tag">未接入</span></li><li><span>M3 · 四章、塔、首领、委托、全部逐角色专属技能</span><span class="tag">未接入</span></li></ul></section>`;
 }
@@ -1013,7 +1320,7 @@ function initGachaCanvas() {
 }
 
 function renderStory() {
-  if (view === 'slots') return '';
+  if (['slots', 'title'].includes(view) || quitState) return '';
   const progress = prologueProgress();
   const scene = storyReplay ? prologueScene(storyReplay.sceneId) : progress.status === 'reading' ? prologueScene(progress.currentSceneId) : null;
   if (!scene) return '';
@@ -1021,7 +1328,7 @@ function renderStory() {
   const beatIndex = storyReplay ? storyReplay.beatIndex : storyDisplayBeat ?? persistedBeat;
   if (scene.id === 'opening' && beatIndex === 0 && !(storyReplay ? storyReplay.backgroundSeen : progress.backgroundSeen)) {
     const background = model.content.prologue.background;
-    if (background) return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel story-background"><div class="story-scene-head"><div><p class="eyebrow">开始之前 · 主角背景</p><h2 id="story-title">${esc(background.title)}</h2></div><span>序章</span></div><div class="story-body"><p class="story-background-subtitle">${esc(background.subtitle)}</p>${background.paragraphs.map(text => `<p class="story-background-copy">${storyText(text)}</p>`).join('')}</div><div class="story-actions"><button class="btn ghost" data-view="slots">选择存档</button><button class="btn primary" data-action="story-background-done">开门，认识队友 <kbd>空格</kbd></button></div></section></div>`;
+    if (background) return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel story-background"><div class="story-scene-head"><div><p class="eyebrow">开始之前 · 主角背景</p><h2 id="story-title">${esc(background.title)}</h2></div><span>序章</span></div><div class="story-body"><p class="story-background-subtitle">${esc(background.subtitle)}</p>${background.paragraphs.map(text => `<p class="story-background-copy">${storyText(text)}</p>`).join('')}</div><div class="story-actions"><button class="btn ghost" data-action="back-to-title">返回初始界面</button><button class="btn primary" data-action="story-background-done">开门，认识队友 <kbd>空格</kbd></button></div></section></div>`;
   }
   const beat = scene.beats[beatIndex];
   const isLast = beatIndex === scene.beats.length - 1;
@@ -1031,7 +1338,7 @@ function renderStory() {
   return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel ${speaker ? `rarity-${speaker.rarity.toLowerCase()}` : 'story-neutral'}">
     <div class="story-scene-head"><div><p class="eyebrow">${storyReplay ? '剧情回看' : '序章 · 第一张回执'}</p><h2 id="story-title">${esc(scene.title)}</h2></div><span>${beatIndex + 1} / ${scene.beats.length}</span></div>
     <div class="story-body"><div class="story-speaker">${esc(beat.speaker)}${speaker ? `<span class="story-rarity">${speaker.rarity}</span>` : ''}</div><div class="story-copy">${storyText(beat.text)}</div><div class="story-character-slot" ${characterCard ? '' : 'aria-hidden="true"'}>${characterCard}</div></div>
-    <div class="story-actions"><div>${storyReplay ? '<button class="btn ghost" data-action="exit-story-replay">退出回看</button>' : '<button class="btn ghost" data-action="skip-story-scene">跳过本段</button>'}<button class="btn ghost" data-view="slots">选择存档</button></div><div class="story-nav"><button class="btn ghost" data-action="previous-story-beat" ${beatIndex === 0 ? 'disabled' : ''}>上一句</button><button class="btn primary" data-action="next-story-beat">${storyReplay && isLast ? '结束回看' : isLast ? esc(scene.nextAction.label) : '继续'} <kbd>空格</kbd></button></div></div>
+    <div class="story-actions"><div>${storyReplay ? '<button class="btn ghost" data-action="exit-story-replay">退出回看</button>' : '<button class="btn ghost" data-action="skip-story-scene">跳过本段</button>'}<button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn ghost" data-action="previous-story-beat" ${beatIndex === 0 ? 'disabled' : ''}>上一句</button><button class="btn primary" data-action="next-story-beat">${storyReplay && isLast ? '结束回看' : isLast ? esc(scene.nextAction.label) : '继续'} <kbd>空格</kbd></button></div></div>
   </section></div>`;
 }
 
@@ -1054,11 +1361,174 @@ function renderDeleteSaveDialog() {
   </section></div>`;
 }
 
+/* ── 初始界面 ── */
+// 斜向细雨：倾角与长度对齐背景图雨丝实测值（方向差分约 17.8°），透明度压低、边缘交给 CSS blur 做柔化。
+function titleRainLayer() {
+  return `<div class="title-rain" aria-hidden="true">${Array.from({ length: 50 }, (_, i) => `<i style="--x:${((i * 41) % 108) - 4}%;--y:${((i * 23) % 96) + 2}%;--delay:${((i % 13) * 0.43).toFixed(2)}s;--dur:${(2.3 + (i % 7) * 0.46).toFixed(2)}s;--len:${76 + (i % 7) * 24}px;--alpha:${(0.055 + (i % 6) * 0.021).toFixed(3)};--tilt:${(16.9 + (i % 5) * 0.45).toFixed(2)}deg"></i>`).join('')}</div>`;
+}
+
+// 右上角喇叭：只有图标，没有文字框。
+function titleAudioButton() {
+  const on = rainEnabled;
+  const waves = on
+    ? '<path d="M13.6 8.6a3.6 3.6 0 0 1 0 6.8" /><path d="M16.4 6a7.4 7.4 0 0 1 0 12" />'
+    : '<path d="m14.2 9.8 4.6 4.4" /><path d="m18.8 9.8-4.6 4.4" />';
+  return `<button class="title-audio" type="button" data-action="toggle-rain" aria-pressed="${on}" aria-label="${on ? '关闭初始界面环境音（雨、风、雷）' : '开启初始界面环境音（雨、风、雷）'}" title="${on ? '关闭雨声与雷声' : '开启雨声与雷声'}">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9.4h3.2L11.6 6v12L7.2 14.6H4z" />${waves}</svg>
+  </button>`;
+}
+
+function titleView() {
+  const filled = model.slots.filter((slot) => !slot.empty).length;
+  const options = [
+    ['select', '▤', '选择存档', '翻开已有的旅团手记'],
+    ['create', '✦', '新建存档', filled >= 3 ? '三个档位都已占用' : '从序章开始新的旅程'],
+    ['quit', '⏻', '退出游戏', '合上会馆的门'],
+  ];
+  return `<main class="title-screen">
+    <div class="title-photo" aria-hidden="true"></div>
+    <div class="title-scrim" aria-hidden="true"></div>
+    ${titleRainLayer()}
+    ${titleAudioButton()}
+    <section class="title-stage">
+      <header class="title-brand">
+        <p class="eyebrow">Mist Lantern Brigade · v0.1</p>
+        <h1>雾灯旅团</h1>
+        <p class="title-tagline">夜雨千山，微光烁烁，不问来路，只将那些离散的人，缓缓渡回此间</p>
+      </header>
+      <nav class="title-menu" aria-label="初始界面">${options.map(([action, glyph, label, note]) => `<button class="title-option" data-title-action="${action}"${action === 'quit' ? ' data-tone="danger"' : ''}><span class="title-option-glyph" aria-hidden="true">${glyph}</span><span class="title-option-text"><strong>${label}</strong><small>${note}</small></span></button>`).join('')}</nav>
+    </section>
+    ${titlePanel === 'slots' ? titleSlotsPanel() : ''}
+    ${renderNewSaveDialog()}
+    ${renderDeleteSaveDialog()}
+    ${quitConfirm ? renderQuitDialog() : ''}
+  </main>`;
+}
+
+function titleSlotsPanel() {
+  return `<div class="title-panel-backdrop"><section class="title-panel" role="dialog" aria-modal="true" aria-labelledby="title-panel-heading">
+    <div class="title-panel-head"><div><p class="eyebrow">旅团手记</p><h2 id="title-panel-heading">从哪一段旅程继续？</h2><p class="fine">三个档位分别保存角色、资源、剧情与免费招募次数；测试存档独立保存，不占正式档位。</p></div><button class="btn ghost" data-title-action="close-panel">返回初始界面</button></div>
+    ${slotsView({ embedded: true })}
+  </section></div>`;
+}
+
+function renderNewSaveDialog() {
+  if (!newSaveSlotId) return '';
+  const index = Number(newSaveSlotId) - 1;
+  const filled = model.slots.filter((slot) => !slot.empty).length;
+  return `<div class="modal-backdrop title-dialog-backdrop"><section class="title-dialog card" role="dialog" aria-modal="true" aria-labelledby="new-save-title">
+    <p class="eyebrow">新建旅团手记</p><h2 id="new-save-title">点亮一间新会馆</h2>
+    <p class="title-dialog-copy">这份旅程会写入 ${newSaveSlotId} 号档位，从完整开场开始，初始五人和 10 张招募券都会准备好。当前已有 ${filled} 份存档。</p>
+    <label class="title-dialog-label" for="new-save-name">旅团手记名称</label>
+    <input id="new-save-name" data-new-slot-name maxlength="20" value="${esc(`旅团${['一', '二', '三'][index]}`)}">
+    <div class="delete-save-actions"><button class="btn ghost" data-title-action="cancel-new-save">取消</button><button class="btn primary" data-title-action="confirm-new-save">开始旅程</button></div>
+  </section></div>`;
+}
+
+function renderQuitDialog() {
+  return `<div class="modal-backdrop title-dialog-backdrop"><section class="title-dialog card" role="dialog" aria-modal="true" aria-labelledby="quit-title">
+    <p class="eyebrow">离开会馆</p><h2 id="quit-title">要退出游戏吗？</h2>
+    <p class="title-dialog-copy">进度已经自动保存。浏览器不一定允许网页自行关闭标签页，如果关不掉会显示告别画面。</p>
+    <div class="delete-save-actions"><button class="btn ghost" data-title-action="cancel-quit">取消</button><button class="btn primary" data-title-action="confirm-quit">退出游戏</button></div>
+  </section></div>`;
+}
+
+function quitView() {
+  return `<main class="title-screen quit-screen">
+    <section class="title-stage quit-stage">
+      <p class="eyebrow">已退出游戏</p>
+      <h1>雨停在雾里</h1>
+      <p class="title-tagline">进度已经保存，可以安全关闭这个标签页了。</p>
+      <button class="btn ghost" data-title-action="reopen">重新点亮会馆</button>
+    </section>
+  </main>`;
+}
+
+function focusTitleScreen() {
+  const active = document.activeElement;
+  const restore = titleFocusSelector; titleFocusSelector = null;
+  if (!restore && active && active !== document.body && app.contains(active)) return;
+  const selector = restore || (titlePanel === 'slots' ? '.title-panel .btn' : newSaveSlotId ? '[data-new-slot-name]' : '.title-option');
+  requestAnimationFrame(() => {
+    const element = app.querySelector(selector);
+    element?.focus({ preventScroll: true });
+    if (element?.matches('[data-new-slot-name]')) element.select();
+  });
+}
+
+async function handleTitleAction(action) {
+  if (action === 'select') { titlePanel = 'slots'; render(); return; }
+  if (action === 'close-panel') { titlePanel = null; render(); return; }
+  if (action === 'create') { await startNewSave(); return; }
+  if (action === 'cancel-new-save') { newSaveSlotId = null; render(); return; }
+  if (action === 'confirm-new-save') { await confirmNewSave(); return; }
+  if (action === 'quit') { quitConfirm = true; render(); return; }
+  if (action === 'cancel-quit') { quitConfirm = false; render(); return; }
+  if (action === 'confirm-quit') { performQuit(); return; }
+  if (action === 'reopen') { quitState = false; titlePanel = null; newSaveSlotId = null; quitConfirm = false; view = 'title'; render(); return; }
+}
+
+async function startNewSave() {
+  if (pending) return;
+  const empty = model.slots.find((slot) => slot.empty);
+  if (!empty) { titlePanel = 'slots'; render(); toast('三个档位都已建立存档，请先进入一份，或删除不需要的存档', true); return; }
+  newSaveSlotId = empty.id; titlePanel = null; render();
+}
+
+// 初始界面里的“刷新存档列表”：只重取一次数据，不打断初始界面。
+async function refreshSaveList() {
+  try {
+    const response = await fetch(`/api/bootstrap?clientId=${encodeURIComponent(clientId)}`, { cache: 'no-store' });
+    const data = await response.json(); if (!data.ok) throw new Error(data.error);
+    Object.assign(model, data); clockOffset = data.serverNow - Date.now(); render(); toast('存档列表已刷新');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function confirmNewSave() {
+  if (pending || !newSaveSlotId) return;
+  const name = document.querySelector('[data-new-slot-name]')?.value || '';
+  const slotId = newSaveSlotId;
+  newSaveSlotId = null;
+  await switchSave(slotId, true, name);
+}
+
+// 离开初始界面：回到会馆，进行中的战斗直接续上。
+function enterGame() {
+  const battle = model.save?.battle;
+  if (model.activeSlotId === 'test') view = 'workbench';
+  else if (battle && ['active', 'paused'].includes(battle.status)) { view = 'battle'; focusId = battle.focusId; strategy = battle.strategy; }
+  else view = 'home';
+  titlePanel = null;
+  render();
+}
+
+function performQuit() {
+  quitConfirm = false;
+  syncRain(false);
+  try { window.close(); } catch { /* 浏览器可能禁止脚本关闭标签页 */ }
+  setTimeout(() => {
+    if (document.hidden) return;
+    quitState = true; titlePanel = null; newSaveSlotId = null;
+    render();
+  }, 220);
+}
+
 function render() {
   clearBattleEffects();
   clearTimeout(timer);
   if (!model) return;
-  if (!model.save) view = 'slots';
+  if (!model.save && view !== 'title') view = 'slots';
+  if (view === 'title' || quitState) {
+    const modalOpen = Boolean(quitState || quitConfirm || newSaveSlotId || deleteSlotId || titlePanel === 'slots');
+    document.body.classList.toggle('modal-open', modalOpen);
+    app.innerHTML = quitState ? quitView() : titleView();
+    if (!quitState) syncRain(rainEnabled); else syncRain(false);
+    syncBgm(false);
+    if (!quitState) focusTitleScreen();
+    return;
+  }
+  syncRain(false);
+  syncBgm(true);
   const content = view === 'slots' ? slotsView() : view === 'home' ? homeView() : view === 'battle' ? battleView() : view === 'recruit' ? recruitView() : view === 'roster' ? rosterView() : view === 'collection' ? collectionView() : view === 'equipment' ? equipmentView() : view === 'workbench' ? workbenchView() : settingsView();
   const modalOpen = Boolean(deleteSlotId || gachaPresentation || (view !== 'slots' && (storyReplay || prologueProgress().status === 'reading')) || storyArchiveOpen || collectionDetailId);
   document.body.classList.toggle('modal-open', modalOpen);
@@ -1184,6 +1654,7 @@ app.addEventListener('click', async (event) => {
     if (equipmentTarget.matches('[data-equipment-slot]')) { handleEquipmentSlotClick(equipmentTarget); return; }
   }
   const target = event.target.closest('button, a, [data-focus]'); if (!target) return;
+  if (target.dataset.titleAction) { await handleTitleAction(target.dataset.titleAction); return; }
   if (target.matches('[data-protagonist-detail]')) { collectionDetailId = 'protagonist'; render(); return; }
   if (target.matches('[data-action="story-background-done"]')) { await finishStoryBackground(); return; }
   if (target.matches('[data-slot-delete]')) {
@@ -1196,7 +1667,7 @@ app.addEventListener('click', async (event) => {
   }
   if (target.dataset.action === 'confirm-delete-save') { await deleteSaveSlot(); return; }
   if (target.matches('[data-slot-create]')) { await switchSave(target.dataset.slotCreate, true); return; }
-  if (target.matches('[data-slot-select]')) { if (target.dataset.slotSelect === model.activeSlotId) { view = model.activeSlotId === 'test' ? 'workbench' : 'home'; render(); } else await switchSave(target.dataset.slotSelect); return; }
+  if (target.matches('[data-slot-select]')) { if (target.dataset.slotSelect === model.activeSlotId) { enterGame(); } else await switchSave(target.dataset.slotSelect); return; }
   if (target.matches('[data-free-pull]')) {
     if (pendingGachaResults()) { startGachaPresentation(model.save.gacha.lastResults, { resume: true }); toast('先揭晓上一批契约，再领取免费招募'); return; }
     ensureAudio(); const result = await act('free_gacha', { offerId: target.dataset.freePull });
@@ -1252,7 +1723,16 @@ app.addEventListener('click', async (event) => {
   }
   if (target.matches('[data-equip]')) { await act('equip', { equipmentId: target.dataset.equip, characterId: equipmentTargetId, expectedUpdatedAt: model.save.updatedAt }); return; }
   const action = target.dataset.action;
-  if (action === 'reload') return location.reload();
+  if (action === 'reload') { if (view === 'title') { await refreshSaveList(); return; } return location.reload(); }
+  if (action === 'toggle-rain') {
+    rainEnabled = !rainEnabled; localStorage.setItem('mist-rain', rainEnabled ? 'on' : 'off');
+    titleFocusSelector = '[data-action="toggle-rain"]';
+    render(); toast(rainEnabled ? '雨声与远处的雷声已开启' : '初始界面环境音已关闭'); return;
+  }
+  if (action === 'back-to-title') {
+    if (view === 'battle' && model.save?.battle && ['active', 'paused'].includes(model.save.battle.status)) await act('battle_pause', { reason: '返回初始界面，已自动暂停' }, { quiet: true });
+    view = 'title'; titlePanel = null; newSaveSlotId = null; quitConfirm = false; quitState = false; render(); return;
+  }
   if (action === 'test-resources') {
     const inputs = [...document.querySelectorAll('[data-test-resource]')];
     if (!inputs.length || inputs.some(input => !input.reportValidity())) return;
@@ -1324,6 +1804,14 @@ app.addEventListener('change', async (event) => {
   if (event.target.matches('[data-gacha-mode]')) { gachaMode = event.target.value; localStorage.setItem('mist-gacha-mode', gachaMode); render(); return; }
   if (event.target.matches('[data-gacha-sound]')) { gachaSound = event.target.checked; localStorage.setItem('mist-gacha-sound', gachaSound ? 'on' : 'off'); if (gachaSound) ensureAudio(); return; }
   if (event.target.matches('[data-gacha-reduce]')) { gachaReduceMotion = event.target.checked; localStorage.setItem('mist-gacha-reduce', String(gachaReduceMotion)); render(); return; }
+  if (event.target.matches('[data-title-rain]')) { rainEnabled = event.target.checked; localStorage.setItem('mist-rain', rainEnabled ? 'on' : 'off'); if (view === 'title') syncRain(true); else syncRain(false); return; }
+  if (event.target.matches('[data-game-bgm]')) { bgmEnabled = event.target.checked; localStorage.setItem('mist-bgm', bgmEnabled ? 'on' : 'off'); syncBgm(view !== 'title'); render(); return; }
+  if (event.target.matches('[data-bgm-volume]')) {
+    bgmVolume = Math.min(100, Math.max(0, Number(event.target.value)));
+    localStorage.setItem('mist-bgm-volume', String(bgmVolume));
+    if (hallMusic) { clearInterval(hallMusic.fadeTimer); hallMusic.fadeTimer = null; hallMusic.element.volume = hallMusicLevel(); }
+    render(); return;
+  }
   if (event.target.matches('[data-import]')) {
     const file = event.target.files[0]; if (!file) return;
     try { const imported = JSON.parse(await file.text()); await act('import_save', { save: imported }); } catch (error) { toast(`导入失败：${error.message}`, true); }
@@ -1334,6 +1822,13 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && view === 'battle' && model?.save?.battle && ['active', 'paused'].includes(model.save.battle.status)) {
     act('battle_pause', { reason: '页面隐藏，已自动暂停' }, { quiet: true });
   }
+  // 切到后台时不继续放音乐，回到前台再接着放。
+  if (document.visibilityState === 'hidden') {
+    if (hallMusic && !hallMusic.element.paused) { hallMusic.autoPaused = true; hallMusicFade(0, 0.6); }
+  } else if (hallMusic?.autoPaused) {
+    hallMusic.autoPaused = false;
+    if (bgmEnabled && !quitState && view !== 'title' && !hallMusicGapTimer) startHallMusic();
+  }
 });
 
 document.addEventListener('keydown', (event) => {
@@ -1341,7 +1836,7 @@ document.addEventListener('keydown', (event) => {
   const editing = event.target.matches('input, select, textarea, [contenteditable="true"]');
   if (space && event.repeat && !editing) { event.preventDefault(); return; }
   if (space && !editing && !deleteSlotId) {
-    if (view !== 'slots' && (storyReplay || prologueProgress().status === 'reading')) { event.preventDefault(); nextStoryBeat(); return; }
+    if (!['slots', 'title'].includes(view) && !quitState && (storyReplay || prologueProgress().status === 'reading')) { event.preventDefault(); nextStoryBeat(); return; }
     if (gachaPresentation) {
       event.preventDefault();
       if (gachaPresentation.phase === 'flight') skipGachaMotion();
@@ -1354,6 +1849,27 @@ document.addEventListener('keydown', (event) => {
       return;
     }
     if (collectionDetailId && !event.target.matches('button')) { event.preventDefault(); collectionDetailId = null; render(); return; }
+  }
+  if (view === 'title' && !quitState && !deleteSlotId) {
+    if (newSaveSlotId) {
+      if (event.key === 'Escape') { event.preventDefault(); newSaveSlotId = null; render(); return; }
+      if (event.key === 'Enter' && event.target.matches('[data-new-slot-name]')) { event.preventDefault(); confirmNewSave(); return; }
+      return;
+    }
+    if (quitConfirm) {
+      if (event.key === 'Escape') { event.preventDefault(); quitConfirm = false; render(); return; }
+      return;
+    }
+    if (event.key === 'Escape' && titlePanel === 'slots') { event.preventDefault(); titlePanel = null; render(); return; }
+    if (!titlePanel && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      const options = [...app.querySelectorAll('.title-option')];
+      if (!options.length) return;
+      event.preventDefault();
+      const current = options.indexOf(document.activeElement);
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      options[current < 0 ? 0 : (current + step + options.length) % options.length].focus({ preventScroll: true });
+      return;
+    }
   }
   if (event.key === 'Escape' && (formationDrag || formationSelection !== null)) { event.preventDefault(); cancelFormationDrag(); formationSelection = null; render(); return; }
   if (event.key === 'Escape' && (equipmentDrag || equipmentSelection)) { event.preventDefault(); clearEquipmentInteraction(); equipmentSelection = null; render(); return; }
@@ -1371,7 +1887,7 @@ document.addEventListener('keydown', (event) => {
       return;
     }
   }
-  if (view !== 'slots' && (storyReplay || prologueProgress().status === 'reading') && (event.key === ' ' || event.code === 'Space') && !event.target.matches('button, input, select, textarea')) {
+  if (!['slots', 'title'].includes(view) && !quitState && (storyReplay || prologueProgress().status === 'reading') && (event.key === ' ' || event.code === 'Space') && !event.target.matches('button, input, select, textarea')) {
     event.preventDefault(); nextStoryBeat(); return;
   }
   if (storyReplay && event.key === 'Escape') { event.preventDefault(); storyReplay = null; render(); return; }

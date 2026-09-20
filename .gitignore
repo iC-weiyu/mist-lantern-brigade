@@ -13,3 +13,7 @@ log.md
 tools/qa-formation-fixture.mjs
 tools/batch-b-balance-report.mjs
 **/save*.json
+
+# 会馆背景乐：第三方版权曲目（《五音疗愈养心古琴》· 秋琴紫若），不随仓库分发。
+# 想在自己的机器上听到音乐，把文件放到 public/assets/hall-bgm.mp3 即可（详见 README 的“声音”一节）。
+public/assets/hall-bgm.*

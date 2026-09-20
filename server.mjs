@@ -176,7 +176,7 @@ async function api(req, res, url) {
   return json(res, 200, { ok: true, result, ...snapshot(), mode: 'writer' });
 }
 
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
 function staticFile(res, pathname) {
   const requested = pathname === '/' ? '/index.html' : pathname;
   const file = path.resolve(publicDir, `.${requested}`);
