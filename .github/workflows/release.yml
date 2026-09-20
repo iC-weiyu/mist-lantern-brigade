@@ -52,11 +52,11 @@ jobs:
           gh release upload "${TAG}" "dist/${ASSET}" --clobber
           gh release edit "${TAG}" --title "${title}" $notes --draft=false
 
-          # 清掉历史遗留的、名字不对的旧附件
-          gh release view "${TAG}" --json assets --jq '.assets[].name' | while read -r name; do
-            if [ -n "${name}" ] && [ "${name}" != "${ASSET}" ]; then
-              echo "删除旧附件：${name}"
-              gh release delete-asset "${TAG}" "${name}" --yes || true
+          # 清掉历史遗留的、名字不对的旧附件（按 API 地址删除，避免以 "-" 开头的名字被当成参数）
+          gh release view "${TAG}" --json assets --jq ".assets[] | select(.name != \"${ASSET}\") | .apiUrl" | while read -r url; do
+            if [ -n "${url}" ]; then
+              echo "删除旧附件：${url}"
+              gh api -X DELETE "${url}"
             fi
           done
 
