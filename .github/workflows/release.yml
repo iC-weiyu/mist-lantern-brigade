@@ -1,0 +1,40 @@
+name: Release
+
+# 推送 v* 标签时自动发版：打包一个解压即可运行的 ZIP，并创建对应的 Release。
+# 以后要发新版：改好代码 → git push → git tag -a v0.3.0 -m "说明" → git push origin v0.3.0
+# Release 正文取自 .github/release-notes.md，发版前记得更新它（没有该文件时自动用提交记录生成）。
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 打包 ZIP（只含纳入版本控制的文件，不含存档与日志）
+        run: |
+          set -e
+          name="雾灯旅团-${GITHUB_REF_NAME}"
+          mkdir -p dist
+          git archive --format=zip --prefix="${name}/" -o "dist/${name}.zip" HEAD
+          ls -lh dist/
+          unzip -l "dist/${name}.zip" | tail -6
+
+      - name: 创建 Release 并附上 ZIP
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          notes="--generate-notes"
+          if [ -f .github/release-notes.md ]; then notes="--notes-file .github/release-notes.md"; fi
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip \
+            --title "雾灯旅团 ${GITHUB_REF_NAME}" \
+            $notes
