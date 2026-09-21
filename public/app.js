@@ -1149,7 +1149,7 @@ function collectionView() {
       ${own ? `<span class="collection-owned">Lv.${own.level} · ${own.breakthrough}突</span>` : '<span class="collection-owned muted">可预览技能与获取途径</span>'}
     </button>`;
   }).join('');
-  return `<section class="collection-protagonist card"><div><p class="eyebrow">主角 · 独立档案</p><h2>${esc(model.protagonist.name)}</h2><p>曾经的护送冒险者，现在的雾灯会馆负责人。带领伙伴接委托，在旅途中不断成长。</p><span class="tag">Lv.${model.protagonist.level}</span> <span class="tag">剧情成长 +${model.protagonist.storyBonus}%</span></div><button class="btn primary" data-protagonist-detail>查看主角档案</button></section>
+  return `<section class="collection-protagonist card"><div><p class="eyebrow">主角 · 独立档案</p><h2>${esc(model.protagonist.name)}</h2><p>曾经的护送冒险者，如今在雾灯会馆落脚。带领伙伴接委托，在旅途中不断成长。</p><span class="tag">Lv.${model.protagonist.level}</span> <span class="tag">剧情成长 +${model.protagonist.storyBonus}%</span></div><button class="btn primary" data-protagonist-detail>查看主角档案</button></section>
     <section class="collection-hero"><div><p class="eyebrow">伙伴图鉴 · 不提供战力奖励</p><h2>旅团的每一次相遇，都留在这里。</h2><p>回收多余卡不会抹除点亮记录；未拥有角色也可查看完整技能与实际获取途径。</p></div><div class="collection-total"><strong>${discovered.size}<span> / ${model.content.characters.length}</span></strong><small>已点亮伙伴</small></div></section>
     <section class="collection-progress">${['SSR', 'SR', 'R'].map((rarity) => `<article><span class="tag ${rarity === 'SSR' ? 'gold' : ''}">${rarity}</span><strong>${counts[rarity].found} / ${counts[rarity].total}</strong><div class="progress"><span style="width:${counts[rarity].found / counts[rarity].total * 100}%"></span></div></article>`).join('')}</section>
     <section class="collection-toolbar card"><div class="collection-search"><input type="text" value="${esc(collectionSearch)}" placeholder="姓名、称号或旧名" aria-label="搜索姓名、称号或旧名" data-collection-search><button class="btn small" data-action="apply-collection-search">搜索</button></div>
@@ -1191,11 +1191,20 @@ function equipmentView() {
   const selectedItem = equipmentSelection?.type === 'item' ? equipmentById(equipmentSelection.equipmentId) : null;
   const selectedSlotItem = equipmentSelection?.type === 'slot' ? equipmentById(equipmentSelection.equipmentId) : null;
   const previewRows = selectedItem && equipmentTargetId ? equipmentPreview(selectedItem.id, equipmentTargetId, selectedItem.slot) : selectedSlotItem ? equipmentPreview(selectedSlotItem.id, equipmentSelection.characterId, equipmentSelection.slot, true) : [];
-  const preview = equipmentSelection ? `<aside class="equipment-preview card" aria-live="polite"><div class="section-head"><div><p class="eyebrow">${selectedItem ? '已选装备 · 请选择同类型槽' : '已选装备槽'}</p><h3>${esc(selectedItem?.name || selectedSlotItem?.name || '空槽')}</h3></div><button class="btn small ghost" data-action="clear-equipment-selection">取消选择</button></div>${selectedItem ? `<p class="fine">${esc(equipmentSlotName(selectedItem.slot))} · ${esc(selectedItem.main)}${equipmentWearer(selectedItem.id) ? ` · 当前穿戴：${esc(char(equipmentWearer(selectedItem.id))?.name || equipmentWearer(selectedItem.id))}` : ' · 当前未穿戴'}</p>` : ''}${previewRows.map((row) => `<div class="equipment-preview-row"><div><strong>${esc(row.name)}</strong><small>${row.beforeIds.map((id) => esc(equipmentById(id)?.name || id)).join('、') || '无'} → ${row.afterIds.map((id) => esc(equipmentById(id)?.name || id)).join('、') || '无'}</small></div>${equipmentStatLine(row.next, row.delta)}</div>`).join('')}${selectedSlotItem ? `<button class="btn danger small" data-equipment-remove="${selectedSlotItem.id}" data-equipment-character="${equipmentSelection.characterId}">卸下选中装备</button>` : ''}<p class="fine equipment-limit-note">差值仅按当前已实现主词条计算；套装效果与随机副词条尚未实装，不计入提升。</p></aside>` : '<aside class="equipment-preview card"><p class="eyebrow">操作提示</p><h3>先选装备，再选合法槽</h3><p class="fine">拖放与点选都提交一笔服务端原子事务。选中槽位可卸下装备，取消或按 Esc 不会改变存档。</p></aside>';
+  const preview = equipmentSelection ? `<aside class="equipment-preview card" aria-live="polite"><div class="section-head"><div><p class="eyebrow">${selectedItem ? '已选装备 · 请选择同类型槽' : '已选装备槽'}</p><h3>${esc(selectedItem?.name || selectedSlotItem?.name || '空槽')}</h3></div><button class="btn small ghost" data-action="clear-equipment-selection">取消选择</button></div>${selectedItem ? `<p class="fine">${esc(equipmentSlotName(selectedItem.slot))} · ${esc(selectedItem.main)}${equipmentWearer(selectedItem.id) ? ` · 当前穿戴：${esc(char(equipmentWearer(selectedItem.id))?.name || equipmentWearer(selectedItem.id))}` : ' · 当前未穿戴'}</p>` : ''}${previewRows.map((row) => `<div class="equipment-preview-row"><div><strong>${esc(row.name)}</strong><small>${row.beforeIds.map((id) => esc(equipmentById(id)?.name || id)).join('、') || '无'} → ${row.afterIds.map((id) => esc(equipmentById(id)?.name || id)).join('、') || '无'}</small></div>${equipmentStatLine(row.next, row.delta)}</div>`).join('')}${selectedSlotItem ? `<button class="btn danger small" data-equipment-remove="${selectedSlotItem.id}" data-equipment-character="${equipmentSelection.characterId}">卸下选中装备</button>` : ''}<p class="fine equipment-limit-note">差值仅按当前已实现主词条计算；套装效果与随机副词条尚未实装，不计入提升。</p></aside>` : '';
   const filtered = model.save.equipment.filter((item) => (equipmentSlotFilter === 'all' || item.slot === equipmentSlotFilter) && (equipmentRarityFilter === 'all' || item.rarity === equipmentRarityFilter) && (equipmentSetFilter === 'all' || item.setId === equipmentSetFilter));
   const sorted = [...filtered].sort((a, b) => (equipmentUnwornFirst ? Number(!equipmentWearer(b.id)) - Number(!equipmentWearer(a.id)) : 0) || (a.name || '').localeCompare(b.name || ''));
-  const renderLibraryItem = (item) => { const wearer = equipmentWearer(item.id); const set = equipmentSet(item.setId); const selected = equipmentSelection?.type === 'item' && equipmentSelection.equipmentId === item.id; return `<button class="card equipment-card ${selected ? 'picked' : ''} ${wearer ? 'worn' : 'unworn'} rarity-${(item.rarity || 'r').toLowerCase()}" data-equipment-item="${esc(item.id)}" draggable="true" aria-pressed="${selected}" aria-label="选择${esc(item.name)}，${equipmentSlotName(item.slot)}"><span class="equipment-card-main"><strong>${esc(item.name)}</strong><span class="tag">${esc(item.rarity)}</span></span><span class="equipment-card-meta">${esc(equipmentSlotName(item.slot))} · ${esc(set?.name || item.setId)} · ${esc(item.main)}</span><span class="equipment-card-wearer">${wearer ? `当前：${esc(char(wearer)?.name || wearer)}` : '未穿戴'}</span></button>`; };
-  return `<div class="section-head"><div><h2>行装室 · ${model.save.equipment.length}/1000</h2><p>装备页使用已保存的五人队伍；换装作用于下一场战斗${model.equipmentState?.battleUsesOpeningSnapshot ? '，当前战斗仍保留开场快照' : ''}。</p></div><span class="tag">同一实例不可同时穿给多人</span></div><section class="equipment-party-sticky"><div class="section-head"><div><p class="eyebrow">已保存上场伙伴</p><h3>固定四槽 · 点击伙伴切换目标</h3></div><button class="btn small ghost" data-action="toggle-equipment-others" aria-expanded="${equipmentOtherOpen}">其他伙伴 ${otherIds.length ? `（${otherIds.length}）` : ''}</button></div><div class="equipment-party-grid">${party.map((id) => renderMember(id, true)).join('')}</div>${equipmentOtherOpen ? `<div class="equipment-other-picker" role="list" aria-label="其他伙伴">${otherIds.length ? otherIds.map((id) => `<button class="equipment-other-button ${equipmentTargetId === id ? 'active' : ''}" data-equipment-target="${id}">${esc(char(id)?.name || id)} <small>${esc(char(id)?.rarity || 'R')} · ${equipmentInfo(id)?.equipmentIds?.length || 0}/4 槽</small></button>`).join('') : '<span class="fine">暂无替补伙伴。</span>'}</div>` : ''}${!party.includes(equipmentTargetId) && equipmentTargetId ? `<div class="equipment-alt-target">${renderMember(equipmentTargetId)}</div>` : ''}</section><section class="equipment-workspace"><div class="equipment-library card"><div class="section-head"><div><p class="eyebrow">装备库</p><h3>拖到目标槽，或点选后再点槽</h3></div><label class="equipment-check"><input type="checkbox" data-equipment-unworn-first ${equipmentUnwornFirst ? 'checked' : ''}> 未穿戴优先</label></div><div class="equipment-filters"><div class="filter-tabs" role="tablist" aria-label="装备类型">${[['all','全部'], ...equipmentSlots.map((slot) => [slot, equipmentSlotName(slot)])].map(([value,label]) => `<button class="filter-tab ${equipmentSlotFilter === value ? 'active' : ''}" data-equipment-slot-filter="${value}" role="tab" aria-selected="${equipmentSlotFilter === value}">${label}</button>`).join('')}</div><select data-equipment-rarity aria-label="品质筛选"><option value="all">全部品质</option>${['精良','史诗','传说'].map((value) => `<option value="${value}" ${equipmentRarityFilter === value ? 'selected' : ''}>${value}</option>`).join('')}</select><select data-equipment-set aria-label="套装筛选"><option value="all">全部套装</option>${model.content.equipmentSets.map((set) => `<option value="${set.id}" ${equipmentSetFilter === set.id ? 'selected' : ''}>${esc(set.name)}</option>`).join('')}</select></div><div class="equipment-library-list">${sorted.length ? sorted.map(renderLibraryItem).join('') : '<div class="empty-state"><strong>没有符合条件的装备</strong>试试放宽筛选条件。</div>'}</div></div>${preview}</section><section class="section grid two"><article class="card"><h3>强化与随机副词条</h3><p class="fine">完整强化、回退与定向重铸尚未接入本轮；本页不会假算这些效果。</p><span class="tag">本批不施工</span></article><article class="card"><h3>套装注册表</h3><p class="fine">12 套已被内容校验器读取；套装 2/4 件机制尚未实装，不会计入属性差值。</p><span class="tag">12 / 12 已注册</span></article></section>`;
+  const renderLibraryItem = (item) => {
+    const wearer = equipmentWearer(item.id); const set = equipmentSet(item.setId);
+    const selected = equipmentSelection?.type === 'item' && equipmentSelection.equipmentId === item.id;
+    // 词条布局：上排名称 · 品质 · 套装；左下穿戴部位与效果加成；右侧是否穿戴／当前穿戴角色。
+    return `<button class="card equipment-card ${selected ? 'picked' : ''} ${wearer ? 'worn' : 'unworn'} rarity-${(item.rarity || 'r').toLowerCase()}" data-equipment-item="${esc(item.id)}" draggable="true" aria-pressed="${selected}" aria-label="选择${esc(item.name)}，${equipmentSlotName(item.slot)}">
+      <span class="equipment-card-head"><strong>${esc(item.name)}</strong><span class="tag">${esc(item.rarity)}</span><span class="equipment-card-set">${esc(set?.name || item.setId)}</span></span>
+      <span class="equipment-card-left"><span class="equipment-card-slot">${esc(equipmentSlotName(item.slot))}</span><span class="equipment-card-stat">${esc(item.main)}</span></span>
+      <span class="equipment-card-wearer">${wearer ? `当前穿戴：${esc(char(wearer)?.name || wearer)}` : '未穿戴'}</span>
+    </button>`;
+  };
+  return `<div class="section-head"><div><h2>行装室 · ${model.save.equipment.length}/1000</h2><p>装备页使用已保存的五人队伍；换装作用于下一场战斗${model.equipmentState?.battleUsesOpeningSnapshot ? '，当前战斗仍保留开场快照' : ''}。</p></div></div><section class="equipment-party-sticky"><div class="section-head"><div><p class="eyebrow">已保存上场伙伴</p><h3>固定四槽 · 点击伙伴切换目标</h3></div><button class="btn small ghost" data-action="toggle-equipment-others" aria-expanded="${equipmentOtherOpen}">其他伙伴 ${otherIds.length ? `（${otherIds.length}）` : ''}</button></div><div class="equipment-party-grid">${party.map((id) => renderMember(id, true)).join('')}</div>${equipmentOtherOpen ? `<div class="equipment-other-picker" role="list" aria-label="其他伙伴">${otherIds.length ? otherIds.map((id) => `<button class="equipment-other-button ${equipmentTargetId === id ? 'active' : ''}" data-equipment-target="${id}">${esc(char(id)?.name || id)} <small>${esc(char(id)?.rarity || 'R')} · ${equipmentInfo(id)?.equipmentIds?.length || 0}/4 槽</small></button>`).join('') : '<span class="fine">暂无替补伙伴。</span>'}</div>` : ''}${!party.includes(equipmentTargetId) && equipmentTargetId ? `<div class="equipment-alt-target">${renderMember(equipmentTargetId)}</div>` : ''}</section><section class="equipment-workspace"><div class="equipment-library card"><div class="section-head"><div><p class="eyebrow">装备库</p><h3>拖到目标槽，或点选后再点槽</h3></div><label class="equipment-check"><input type="checkbox" data-equipment-unworn-first ${equipmentUnwornFirst ? 'checked' : ''}> 未穿戴优先</label></div><div class="equipment-filters"><div class="filter-tabs" role="tablist" aria-label="装备类型">${[['all','全部'], ...equipmentSlots.map((slot) => [slot, equipmentSlotName(slot)])].map(([value,label]) => `<button class="filter-tab ${equipmentSlotFilter === value ? 'active' : ''}" data-equipment-slot-filter="${value}" role="tab" aria-selected="${equipmentSlotFilter === value}">${label}</button>`).join('')}</div><select data-equipment-rarity aria-label="品质筛选"><option value="all">全部品质</option>${['精良','史诗','传说'].map((value) => `<option value="${value}" ${equipmentRarityFilter === value ? 'selected' : ''}>${value}</option>`).join('')}</select><select data-equipment-set aria-label="套装筛选"><option value="all">全部套装</option>${model.content.equipmentSets.map((set) => `<option value="${set.id}" ${equipmentSetFilter === set.id ? 'selected' : ''}>${esc(set.name)}</option>`).join('')}</select></div><div class="equipment-library-list">${sorted.length ? sorted.map(renderLibraryItem).join('') : '<div class="empty-state"><strong>没有符合条件的装备</strong>试试放宽筛选条件。</div>'}</div></div>${preview}</section><section class="section grid two"><article class="card"><h3>强化与随机副词条</h3><p class="fine">完整强化、回退与定向重铸尚未接入本轮；本页不会假算这些效果。</p><span class="tag">本批不施工</span></article><article class="card"><h3>套装注册表</h3><p class="fine">12 套已被内容校验器读取；套装 2/4 件机制尚未实装，不会计入属性差值。</p><span class="tag">12 / 12 已注册</span></article></section>`;
 }
 
 function slotsView({ embedded = false } = {}) {
@@ -1252,8 +1261,8 @@ function settingsView() {
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
     <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><p class="fine">初始界面环境音由浏览器实时合成；会馆背景乐播放 public/assets/hall-bgm.mp3，一曲放完静置 30 秒再循环。受自动播放限制，首次点击或按键后才会出声。</p><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音（雨 · 风 · 雷）</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
-    ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}</div>
-    <section class="section card"><div class="section-head"><div><h2>版本范围</h2><p>把已实现与后续内容明确分开。</p></div><span class="tag gold">v0.2.1 playable slice</span></div><ul class="status-list"><li><span>M0 · 42 SSR / 48 SR / 72 R / 12 套装统一注册与校验</span><span class="tag green">已实现</span></li><li><span>图鉴 · 162 人、收藏持久化、搜索筛选、NEW 与详情预览</span><span class="tag green">已实现</span></li><li><span>M1 · 五人行动条、P/A/U、护盾/治疗/持续伤害、集火、策略、暂停、1/2/3×</span><span class="tag green">已实现</span></li><li><span>M2 · 三池规则、心愿、软保底、里程碑、重复凭证、突破/回收、编队、等级、掉落穿戴</span><span class="tag green">可玩切片</span></li><li><span>M2 · 装备强化/重铸、完整碎片商品交互、等级重置</span><span class="tag">未接入</span></li><li><span>M3 · 四章、塔、首领、委托、全部逐角色专属技能</span><span class="tag">未接入</span></li></ul></section>`;
+    ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
+    <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">编队站位、战斗阵容、剧情对白与主角档案都使用这个名字。1～12 个字。</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
 }
 
 function renderGachaOverlay() {
@@ -1331,15 +1340,15 @@ function renderStory() {
   // 序章开场第一步：先给"我"取名字；每个存档只问一次，回看与跳过都不再出现。
   if (!storyReplay && scene.id === 'opening' && beatIndex === 0 && !progress.backgroundSeen && !model.protagonist?.nameConfirmed) {
     return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="hero-name-title"><section class="story-panel story-background story-name-panel">
-      <div class="story-scene-head"><div><p class="eyebrow">开始之前 · 报上名来</p><h2 id="hero-name-title">这一趟，你叫什么？</h2></div><span>序章</span></div>
+      <div class="story-scene-head"><div><p class="eyebrow">开始之前 · 报上名来</p><h2 id="hero-name-title">风雨一途，敢问足下高名？</h2></div><span>序章</span></div>
       <div class="story-body">
-        <p class="story-background-subtitle">此后同伴会这样称呼你：编队里的站位、战斗中的阵容、剧情里的对白都会用这个名字。</p>
+        <p class="story-background-subtitle">飘然在这渺渺烟雨，竟不觉来到一舍会馆……“足下高名”？不记得了，或从来没有罢。</p>
         <label class="hero-name-field" for="hero-name-input"><span>你的名字</span>
           <input id="hero-name-input" data-hero-name maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-describedby="hero-name-hint">
         </label>
-        <p class="fine" id="hero-name-hint">1～12 个字；留空或直接确认都会沿用当前名字。</p>
+        <p class="fine" id="hero-name-hint">1～12 个字；真的想不起来，就这样空着确认，此后便唤你「浪人」。</p>
       </div>
-      <div class="story-actions"><div><button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn ghost" data-action="skip-hero-name">先不取名</button><button class="btn primary" data-action="confirm-hero-name">就叫这个名字 <kbd>回车</kbd></button></div></div>
+      <div class="story-actions"><div><button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn primary" data-action="confirm-hero-name">报上名号 <kbd>回车</kbd></button></div></div>
     </section></div>`;
   }
   if (scene.id === 'opening' && beatIndex === 0 && !(storyReplay ? storyReplay.backgroundSeen : progress.backgroundSeen)) {
@@ -1595,13 +1604,24 @@ async function finishCurrentStoryScene(skipped = false) {
   render();
 }
 
-async function submitHeroName(skip = false) {
+// 序章取名页确认：留空视为"想不起来"，沿用默认名「浪人」。
+async function submitHeroName() {
   const input = document.querySelector('[data-hero-name]');
   const typed = (input?.value || '').trim();
-  const name = skip || !typed ? (model.protagonist?.name || '会馆负责人') : typed;
-  if (!skip && input && typed && !input.reportValidity()) return;
+  const name = typed || (model.protagonist?.name || '浪人');
+  if (typed && input && !input.reportValidity()) return;
   const result = await act('set_protagonist_name', { name }, { quiet: true });
-  if (result) toast(skip ? `仍称呼你为「${result.name}」` : `此后，同伴会称你为「${result.name}」`);
+  if (result) toast(typed ? `此后，同伴会称你为「${result.name}」` : `不记得也无妨，此后便唤你「${result.name}」`);
+}
+
+// 设置页改名：与序章同一个服务端动作。
+async function saveHeroNameFromSettings() {
+  const input = document.querySelector('[data-hero-name-input]');
+  if (input && !input.reportValidity()) return;
+  const name = (input?.value || '').trim();
+  if (!name) { toast('名字不能为空（1～12 个字）', true); input?.focus(); return; }
+  const result = await act('set_protagonist_name', { name });
+  if (result) toast(`名字已改为「${result.name}」`);
 }
 
 async function nextStoryBeat() {
@@ -1691,8 +1711,8 @@ app.addEventListener('click', async (event) => {
   const target = event.target.closest('button, a, [data-focus]'); if (!target) return;
   if (target.dataset.titleAction) { await handleTitleAction(target.dataset.titleAction); return; }
   if (target.matches('[data-protagonist-detail]')) { collectionDetailId = 'protagonist'; render(); return; }
-  if (target.matches('[data-action="confirm-hero-name"]')) { await submitHeroName(false); return; }
-  if (target.matches('[data-action="skip-hero-name"]')) { await submitHeroName(true); return; }
+  if (target.matches('[data-action="confirm-hero-name"]')) { await submitHeroName(); return; }
+  if (target.matches('[data-action="save-hero-name"]')) { await saveHeroNameFromSettings(); return; }
   if (target.matches('[data-action="story-background-done"]')) { await finishStoryBackground(); return; }
   if (target.matches('[data-slot-delete]')) {
     deleteSlotId = target.dataset.slotDelete; render();
@@ -1929,7 +1949,8 @@ document.addEventListener('keydown', (event) => {
   }
   if (storyReplay && event.key === 'Escape') { event.preventDefault(); storyReplay = null; render(); return; }
   if (storyArchiveOpen && event.key === 'Escape') { event.preventDefault(); storyArchiveOpen = false; render(); return; }
-  if (event.target.matches?.('[data-hero-name]') && event.key === 'Enter') { event.preventDefault(); submitHeroName(false); return; }
+  if (event.target.matches?.('[data-hero-name]') && event.key === 'Enter') { event.preventDefault(); submitHeroName(); return; }
+  if (event.target.matches?.('[data-hero-name-input]') && event.key === 'Enter') { event.preventDefault(); saveHeroNameFromSettings(); return; }
   if (event.target.matches?.('[data-collection-search]') && event.key === 'Enter') { event.preventDefault(); collectionSearch = event.target.value; render(); return; }
   const equipmentSlot = event.target.closest?.('[data-equipment-slot]');
   if (equipmentSlot && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleEquipmentSlotClick(equipmentSlot); return; }

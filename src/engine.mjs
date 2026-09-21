@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { ensureProtagonist } from './protagonist.mjs';
+import { ensureProtagonist, DEFAULT_PROTAGONIST_NAME } from './protagonist.mjs';
 import { ensureFormation, applyFormationBonus, formationRowIndex, FORMATION_ROW_KEYS } from './formation.mjs';
 
 export const SAVE_VERSION = 1;
@@ -114,7 +114,7 @@ export function createSave(content) {
   const starterIds = ['L01', 'L02', 'L03', 'L04', 'L05'];
   for (const id of starterIds) owned[id] = { level: 1, breakthrough: 0, dupes: 0, investedXp: 0, investedCoins: 0 };
   return {
-    version: SAVE_VERSION, updatedAt: new Date().toISOString(), profile: { name: '会馆负责人', protagonist: { level: 1 } },
+    version: SAVE_VERSION, updatedAt: new Date().toISOString(), profile: { name: DEFAULT_PROTAGONIST_NAME, protagonist: { level: 1 } },
     currencies: { tickets: 10, coins: 12000, xp: 3000, notes: 10, equipmentDust: 80, contractShards: 0 },
     owned, party: ['L01', 'L02', 'L03', 'L04', 'L05'],
     formation: ['L01', null, null, 'L04', 'protagonist', 'L05', 'L02', 'L03', null],

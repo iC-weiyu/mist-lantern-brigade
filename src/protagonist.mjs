@@ -5,7 +5,7 @@ const MILESTONES = [
   { id: 'first_receipt', stageId: 'prologue_3', name: '护送队伍归来', bonus: .25 },
 ];
 
-export const DEFAULT_PROTAGONIST_NAME = '会馆负责人';
+export const DEFAULT_PROTAGONIST_NAME = '浪人';
 export const PROTAGONIST_NAME_LIMIT = 12;
 
 export function ensureProtagonist(save) {
