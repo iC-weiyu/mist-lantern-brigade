@@ -92,6 +92,8 @@ function equipmentSlotName(slot) { return ({ weapon: '武器', armor: '防具', 
 function tx() { return crypto.randomUUID(); }
 function prologueScene(id) { return model.content.prologue?.scenes?.find((scene) => scene.id === id); }
 function prologueProgress() { return model?.save?.story?.prologue || {}; }
+// 序章开场由玩家给"我"取的名字；未取名时退回占位称呼。
+function heroName() { return model?.protagonist?.name || '主角'; }
 
 const equipmentSlots = ['weapon', 'armor', 'accessory', 'relic'];
 function equipmentById(id) { return model.save.equipment.find((item) => item.id === id); }
@@ -820,9 +822,9 @@ function clearFormationDraft() { cancelFormationDrag(); partyDraft = null; forma
 function formationView() {
   const rows = [ ['前排', '生命、防御 +15%'], ['中排', '攻击 +10%'], ['后排', '治疗、护盾效果 +15%'] ];
   return `<div class="formation-editor"><div class="formation-caption"><strong>九宫阵型</strong><span>↑ 敌方方向</span></div><p class="fine">拖动调整位置，落到已有角色的格子会互换。保存编队后，下一场战斗生效。</p>${rows.map(([name, bonus], row) => `<div class="formation-row"><div class="formation-row-label"><strong>${name}</strong><span>${bonus}</span></div><div class="formation-cells">${formationDraft.slice(row * 3, row * 3 + 3).map((id, column) => {
-    const index = row * 3 + column; const hero = id === 'protagonist'; const character = hero ? { name: '主角', rarity: 'SR', role: '独立占位 · 暂不出手' } : id ? char(id) : null;
+    const index = row * 3 + column; const hero = id === 'protagonist'; const character = hero ? { name: heroName(), rarity: 'SR', role: '独立占位 · 暂不出手' } : id ? char(id) : null;
     return `<button type="button" class="formation-cell ${character ? `rarity-${character.rarity.toLowerCase()}` : 'empty'} ${formationSelection === index ? 'picked' : ''}" data-form-cell="${index}" aria-pressed="${formationSelection === index}" aria-label="${name}${column + 1}格，${character ? `${esc(character.name)}，${character.rarity}${hero ? '起步' : ''}` : '空位'}"><small>${name} ${column + 1}${character ? ` · ${character.rarity}${hero ? '起步' : ''}` : ''}</small><strong>${character ? esc(character.name) : '空位'}</strong><span>${character ? esc(character.role) : '可拖入角色'}</span></button>`;
-  }).join('')}</div></div>`).join('')}<p class="formation-feedback" aria-live="polite">${formationSelection === null ? '主角与五名伙伴自由站位，同一排三个格子的加成相同。' : '已选中角色：点选目标格，或按 Tab 移动后按回车落位。'}</p></div>`;
+  }).join('')}</div></div>`).join('')}<p class="formation-feedback" aria-live="polite">${formationSelection === null ? `${esc(heroName())}与五名伙伴自由站位，同一排三个格子的加成相同。` : '已选中角色：点选目标格，或按 Tab 移动后按回车落位。'}</p></div>`;
 }
 
 function moveFormation(from, to) {
@@ -1023,7 +1025,7 @@ function battleFormationView(battle) {
   if (!battle.formation) return `<div class="units">${battle.players.map(unit => unitCard(unit)).join('')}</div>`;
   const coverNote = battle.positioning?.version ? '<p class="fine battle-cover-note">前排掩护：敌方普通单体直伤按前/中/后排 60%/25%/15% 选行；前排存活时中排×0.85、后排×0.70，前排倒下后恢复×1.00。全体与穿透/刺杀类标记不适用。</p>' : '';
   return `<div class="battle-formation"><p class="fine">我方阵型 · 前排朝向敌方 · 站位加成已计入本场属性</p>${coverNote}${['前排','中排','后排'].map((name, row) => `<div class="battle-formation-label">${name}</div><div class="battle-formation-row">${battle.formation.slice(row * 3, row * 3 + 3).map(id => {
-    if (id === 'protagonist') return '<article class="battle-hero-placeholder"><strong>主角</strong><span>独立占位 · 暂不出手</span></article>';
+    if (id === 'protagonist') return `<article class="battle-hero-placeholder"><strong>${esc(heroName())}</strong><span>独立占位 · 暂不出手</span></article>`;
     const unit = battle.players.find(candidate => candidate.characterId === id);
     return unit ? unitCard(unit) : '<div class="battle-empty-cell" aria-label="空位"></div>';
   }).join('')}</div>`).join('')}</div>`;
@@ -1068,7 +1070,7 @@ function rosterView() {
   const owned = model.content.characters.filter((c) => ownedIds.includes(c.id));
   const locked = model.content.characters.filter((c) => !ownedIds.includes(c.id));
   const optionHtml = owned.map((c) => `<option class="rarity-${c.rarity.toLowerCase()}" value="${c.id}">${c.rarity} · ${esc(c.name)} · ${esc(c.role)}</option>`).join('');
-  return `${protagonistCard()}<section class="card"><div class="section-head"><div><h2>五名出战伙伴</h2><p>主角独立占位，不占伙伴名额。每个伙伴只能上阵一次；保存后下一场战斗生效。</p></div><div class="party-toolbar"><button class="btn ghost small" data-action="auto-party" title="按品质、等级、突破优先选择，前中后排各至少一名伙伴">一键配队</button><button class="btn primary small" data-action="save-party">${dirty ? '保存编队（有变更）' : '保存编队'}</button></div></div>${dirty ? '<p class="party-unsaved" role="status">编队尚未保存 · 下一场仍会使用之前的队伍，请先保存变更。</p>' : ''}<div class="party-editor">${partyDraft.map((id, i) => `<div class="form-row"><label>${i + 1} 号位</label><select aria-label="${i + 1} 号位" class="rarity-${char(id).rarity.toLowerCase()}" data-party-slot="${i}">${optionHtml.replace(`value="${id}"`, `value="${id}" selected`)}</select></div>`).join('')}</div>${formationView()}</section>
+  return `${protagonistCard()}<section class="card"><div class="section-head"><div><h2>五名出战伙伴</h2><p>${esc(heroName())}独立占位，不占伙伴名额。每个伙伴只能上阵一次；保存后下一场战斗生效。</p></div><div class="party-toolbar"><button class="btn ghost small" data-action="auto-party" title="按品质、等级、突破优先选择，前中后排各至少一名伙伴">一键配队</button><button class="btn primary small" data-action="save-party">${dirty ? '保存编队（有变更）' : '保存编队'}</button></div></div>${dirty ? '<p class="party-unsaved" role="status">编队尚未保存 · 下一场仍会使用之前的队伍，请先保存变更。</p>' : ''}<div class="party-editor">${partyDraft.map((id, i) => `<div class="form-row"><label>${i + 1} 号位</label><select aria-label="${i + 1} 号位" class="rarity-${char(id).rarity.toLowerCase()}" data-party-slot="${i}">${optionHtml.replace(`value="${id}"`, `value="${id}" selected`)}</select></div>`).join('')}</div>${formationView()}</section>
     <section class="section"><div class="section-head"><div><h2>已招募 · ${owned.length}</h2><p>升级返还、技能升级与装备预设后续继续完善；当前支持等级、突破和凭证回收。</p></div></div><div class="roster">${owned.map((c) => characterCard(c, true)).join('')}</div></section>
     <section class="section"><details><summary class="btn ghost" style="display:inline-flex;align-items:center;cursor:pointer">查看未招募图鉴 · ${locked.length}</summary><div class="roster" style="margin-top:12px">${locked.map((c) => characterCard(c, false)).join('')}</div></details></section>`;
 }
@@ -1076,7 +1078,7 @@ function rosterView() {
 function protagonistCard() {
   const hero = model.protagonist;
   if (!hero) return '';
-  return `<section class="card protagonist-card rarity-sr" aria-label="主角成长档案"><div class="protagonist-heading"><div class="protagonist-portrait" aria-hidden="true">你</div><div><p class="eyebrow">主角 · 独立成长位</p><h2>${esc(hero.name)} <span class="tag">SR 起步</span></h2><p class="fine">Lv.${hero.level} · 成长不设等级上限 · 剧情增幅 +${hero.storyBonus}%</p></div></div><div class="protagonist-stats"><div><span>生命</span><strong>${hero.hp}</strong></div><div><span>攻击</span><strong>${hero.attack}</strong></div><div><span>防御</span><strong>${hero.defense}</strong></div><div><span>速度</span><strong>${hero.speed}</strong></div></div><div class="protagonist-milestones">${hero.milestones.map((entry) => `<span class="${entry.unlocked ? 'unlocked' : ''}">${entry.unlocked ? '✓' : '◇'} ${esc(entry.name)} · 生命 / 攻击 / 防御 +${Math.round(entry.bonus * 100)}%</span>`).join('')}</div><p class="fine protagonist-note">当前为主角成长档案，暂不作为战斗单位出手；五名伙伴照常作战。剧情增幅随首次通关生效，回看不会重复获得。</p></section>`;
+  return `<section class="card protagonist-card rarity-sr" aria-label="主角成长档案"><div class="protagonist-heading"><div class="protagonist-portrait" aria-hidden="true">${esc(hero.name[0] || '你')}</div><div><p class="eyebrow">主角 · 独立成长位</p><h2>${esc(hero.name)} <span class="tag">SR 起步</span></h2><p class="fine">Lv.${hero.level} · 成长不设等级上限 · 剧情增幅 +${hero.storyBonus}%</p></div></div><div class="protagonist-stats"><div><span>生命</span><strong>${hero.hp}</strong></div><div><span>攻击</span><strong>${hero.attack}</strong></div><div><span>防御</span><strong>${hero.defense}</strong></div><div><span>速度</span><strong>${hero.speed}</strong></div></div><div class="protagonist-milestones">${hero.milestones.map((entry) => `<span class="${entry.unlocked ? 'unlocked' : ''}">${entry.unlocked ? '✓' : '◇'} ${esc(entry.name)} · 生命 / 攻击 / 防御 +${Math.round(entry.bonus * 100)}%</span>`).join('')}</div><p class="fine protagonist-note">当前为${esc(hero.name)}的成长档案，暂不作为战斗单位出手；五名伙伴照常作战。剧情增幅随首次通关生效，回看不会重复获得。</p></section>`;
 }
 
 function characterCard(c, isOwned) {
@@ -1251,7 +1253,7 @@ function settingsView() {
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
     <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><p class="fine">初始界面环境音由浏览器实时合成；会馆背景乐播放 public/assets/hall-bgm.mp3，一曲放完静置 30 秒再循环。受自动播放限制，首次点击或按键后才会出声。</p><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音（雨 · 风 · 雷）</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}</div>
-    <section class="section card"><div class="section-head"><div><h2>版本范围</h2><p>把已实现与后续内容明确分开。</p></div><span class="tag gold">v0.2 playable slice</span></div><ul class="status-list"><li><span>M0 · 42 SSR / 48 SR / 72 R / 12 套装统一注册与校验</span><span class="tag green">已实现</span></li><li><span>图鉴 · 162 人、收藏持久化、搜索筛选、NEW 与详情预览</span><span class="tag green">已实现</span></li><li><span>M1 · 五人行动条、P/A/U、护盾/治疗/持续伤害、集火、策略、暂停、1/2/3×</span><span class="tag green">已实现</span></li><li><span>M2 · 三池规则、心愿、软保底、里程碑、重复凭证、突破/回收、编队、等级、掉落穿戴</span><span class="tag green">可玩切片</span></li><li><span>M2 · 装备强化/重铸、完整碎片商品交互、等级重置</span><span class="tag">未接入</span></li><li><span>M3 · 四章、塔、首领、委托、全部逐角色专属技能</span><span class="tag">未接入</span></li></ul></section>`;
+    <section class="section card"><div class="section-head"><div><h2>版本范围</h2><p>把已实现与后续内容明确分开。</p></div><span class="tag gold">v0.2.1 playable slice</span></div><ul class="status-list"><li><span>M0 · 42 SSR / 48 SR / 72 R / 12 套装统一注册与校验</span><span class="tag green">已实现</span></li><li><span>图鉴 · 162 人、收藏持久化、搜索筛选、NEW 与详情预览</span><span class="tag green">已实现</span></li><li><span>M1 · 五人行动条、P/A/U、护盾/治疗/持续伤害、集火、策略、暂停、1/2/3×</span><span class="tag green">已实现</span></li><li><span>M2 · 三池规则、心愿、软保底、里程碑、重复凭证、突破/回收、编队、等级、掉落穿戴</span><span class="tag green">可玩切片</span></li><li><span>M2 · 装备强化/重铸、完整碎片商品交互、等级重置</span><span class="tag">未接入</span></li><li><span>M3 · 四章、塔、首领、委托、全部逐角色专属技能</span><span class="tag">未接入</span></li></ul></section>`;
 }
 
 function renderGachaOverlay() {
@@ -1326,6 +1328,20 @@ function renderStory() {
   if (!scene) return '';
   const persistedBeat = progress.beatIndex || 0;
   const beatIndex = storyReplay ? storyReplay.beatIndex : storyDisplayBeat ?? persistedBeat;
+  // 序章开场第一步：先给"我"取名字；每个存档只问一次，回看与跳过都不再出现。
+  if (!storyReplay && scene.id === 'opening' && beatIndex === 0 && !progress.backgroundSeen && !model.protagonist?.nameConfirmed) {
+    return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="hero-name-title"><section class="story-panel story-background story-name-panel">
+      <div class="story-scene-head"><div><p class="eyebrow">开始之前 · 报上名来</p><h2 id="hero-name-title">这一趟，你叫什么？</h2></div><span>序章</span></div>
+      <div class="story-body">
+        <p class="story-background-subtitle">此后同伴会这样称呼你：编队里的站位、战斗中的阵容、剧情里的对白都会用这个名字。</p>
+        <label class="hero-name-field" for="hero-name-input"><span>你的名字</span>
+          <input id="hero-name-input" data-hero-name maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-describedby="hero-name-hint">
+        </label>
+        <p class="fine" id="hero-name-hint">1～12 个字；留空或直接确认都会沿用当前名字。</p>
+      </div>
+      <div class="story-actions"><div><button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn ghost" data-action="skip-hero-name">先不取名</button><button class="btn primary" data-action="confirm-hero-name">就叫这个名字 <kbd>回车</kbd></button></div></div>
+    </section></div>`;
+  }
   if (scene.id === 'opening' && beatIndex === 0 && !(storyReplay ? storyReplay.backgroundSeen : progress.backgroundSeen)) {
     const background = model.content.prologue.background;
     if (background) return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel story-background"><div class="story-scene-head"><div><p class="eyebrow">开始之前 · 主角背景</p><h2 id="story-title">${esc(background.title)}</h2></div><span>序章</span></div><div class="story-body"><p class="story-background-subtitle">${esc(background.subtitle)}</p>${background.paragraphs.map(text => `<p class="story-background-copy">${storyText(text)}</p>`).join('')}</div><div class="story-actions"><button class="btn ghost" data-action="back-to-title">返回初始界面</button><button class="btn primary" data-action="story-background-done">开门，认识队友 <kbd>空格</kbd></button></div></section></div>`;
@@ -1333,11 +1349,12 @@ function renderStory() {
   const beat = scene.beats[beatIndex];
   const isLast = beatIndex === scene.beats.length - 1;
   const speaker = beat.speakerId ? char(beat.speakerId) : beat.speaker === '你' ? { rarity: 'SR' } : null;
+  const speakerLabel = beat.speaker === '你' ? heroName() : beat.speaker;
   const introduced = beat.characterCard ? char(beat.characterCard.id) : null;
   const characterCard = beat.characterCard ? `<aside class="story-character ${introduced ? `rarity-${introduced.rarity.toLowerCase()}` : ''}"><span>${esc(beat.characterCard.label)}${introduced ? ` <b class="story-rarity">${introduced.rarity}</b>` : ''}</span><strong>${esc(beat.characterCard.role)}</strong><p>${esc(beat.characterCard.hint)}</p></aside>` : '';
   return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel ${speaker ? `rarity-${speaker.rarity.toLowerCase()}` : 'story-neutral'}">
     <div class="story-scene-head"><div><p class="eyebrow">${storyReplay ? '剧情回看' : '序章 · 第一张回执'}</p><h2 id="story-title">${esc(scene.title)}</h2></div><span>${beatIndex + 1} / ${scene.beats.length}</span></div>
-    <div class="story-body"><div class="story-speaker">${esc(beat.speaker)}${speaker ? `<span class="story-rarity">${speaker.rarity}</span>` : ''}</div><div class="story-copy">${storyText(beat.text)}</div><div class="story-character-slot" ${characterCard ? '' : 'aria-hidden="true"'}>${characterCard}</div></div>
+    <div class="story-body"><div class="story-speaker">${esc(speakerLabel)}${speaker ? `<span class="story-rarity">${speaker.rarity}</span>` : ''}</div><div class="story-copy">${storyText(beat.text)}</div><div class="story-character-slot" ${characterCard ? '' : 'aria-hidden="true"'}>${characterCard}</div></div>
     <div class="story-actions"><div>${storyReplay ? '<button class="btn ghost" data-action="exit-story-replay">退出回看</button>' : '<button class="btn ghost" data-action="skip-story-scene">跳过本段</button>'}<button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn ghost" data-action="previous-story-beat" ${beatIndex === 0 ? 'disabled' : ''}>上一句</button><button class="btn primary" data-action="next-story-beat">${storyReplay && isLast ? '结束回看' : isLast ? esc(scene.nextAction.label) : '继续'} <kbd>空格</kbd></button></div></div>
   </section></div>`;
 }
@@ -1392,7 +1409,7 @@ function titleView() {
     ${titleAudioButton()}
     <section class="title-stage">
       <header class="title-brand">
-        <p class="eyebrow">Mist Lantern Brigade · v0.2</p>
+        <p class="eyebrow">Mist Lantern Brigade · v0.2.1</p>
         <h1>雾灯旅团</h1>
         <p class="title-tagline">夜雨千山，微光烁烁，不问来路，只将那些离散的人，缓缓渡回此间</p>
       </header>
@@ -1535,6 +1552,14 @@ function render() {
   app.innerHTML = `<div class="app-shell" ${modalOpen ? 'inert aria-hidden="true"' : ''}>${nav()}<div class="main">${topbar()}<main class="page">${model.mode === 'readonly' ? '<div class="banner readonly">另一个标签页正在写入；本页暂为只读。关闭旧页并等待约 20 秒后刷新可接管。</div>' : ''}${model.activeSlotId === 'test' ? '<div class="banner test-mode-banner">测试存档 · 独立保存，可在测试工作台编辑资源与领取角色</div>' : ''}${['home', 'slots', 'workbench', 'battle'].includes(view) ? '' : storyGoalBanner()}${content}</main></div></div>${renderStory()}${renderStoryArchive()}${renderGachaOverlay()}${renderCollectionDetail()}${renderDeleteSaveDialog()}`;
   initGachaCanvas();
   scheduleBattle();
+  focusHeroNameInput();
+}
+
+// 命名页出现时把光标放进输入框，回车即可确认。
+function focusHeroNameInput() {
+  const input = app.querySelector('[data-hero-name]');
+  if (!input || document.activeElement === input) return;
+  requestAnimationFrame(() => { input.focus({ preventScroll: true }); input.select?.(); });
 }
 
 function scheduleBattle() {
@@ -1570,7 +1595,17 @@ async function finishCurrentStoryScene(skipped = false) {
   render();
 }
 
+async function submitHeroName(skip = false) {
+  const input = document.querySelector('[data-hero-name]');
+  const typed = (input?.value || '').trim();
+  const name = skip || !typed ? (model.protagonist?.name || '会馆负责人') : typed;
+  if (!skip && input && typed && !input.reportValidity()) return;
+  const result = await act('set_protagonist_name', { name }, { quiet: true });
+  if (result) toast(skip ? `仍称呼你为「${result.name}」` : `此后，同伴会称你为「${result.name}」`);
+}
+
 async function nextStoryBeat() {
+  if (document.querySelector('[data-hero-name]')) return;   // 命名这一步用回车或按钮确认，空格不越过
   if (document.querySelector('[data-action="story-background-done"]')) { await finishStoryBackground(); return; }
   if (storyReplay) {
     const scene = prologueScene(storyReplay.sceneId);
@@ -1656,6 +1691,8 @@ app.addEventListener('click', async (event) => {
   const target = event.target.closest('button, a, [data-focus]'); if (!target) return;
   if (target.dataset.titleAction) { await handleTitleAction(target.dataset.titleAction); return; }
   if (target.matches('[data-protagonist-detail]')) { collectionDetailId = 'protagonist'; render(); return; }
+  if (target.matches('[data-action="confirm-hero-name"]')) { await submitHeroName(false); return; }
+  if (target.matches('[data-action="skip-hero-name"]')) { await submitHeroName(true); return; }
   if (target.matches('[data-action="story-background-done"]')) { await finishStoryBackground(); return; }
   if (target.matches('[data-slot-delete]')) {
     deleteSlotId = target.dataset.slotDelete; render();
@@ -1892,6 +1929,7 @@ document.addEventListener('keydown', (event) => {
   }
   if (storyReplay && event.key === 'Escape') { event.preventDefault(); storyReplay = null; render(); return; }
   if (storyArchiveOpen && event.key === 'Escape') { event.preventDefault(); storyArchiveOpen = false; render(); return; }
+  if (event.target.matches?.('[data-hero-name]') && event.key === 'Enter') { event.preventDefault(); submitHeroName(false); return; }
   if (event.target.matches?.('[data-collection-search]') && event.key === 'Enter') { event.preventDefault(); collectionSearch = event.target.value; render(); return; }
   const equipmentSlot = event.target.closest?.('[data-equipment-slot]');
   if (equipmentSlot && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleEquipmentSlotClick(equipmentSlot); return; }

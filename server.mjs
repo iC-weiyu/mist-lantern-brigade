@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { loadContent } from './src/content.mjs';
 import { SaveSlots } from './src/save-slots.mjs';
 import { freeRecruitStatus, claimFreeRecruit } from './src/free-recruit.mjs';
-import { protagonistSummary } from './src/protagonist.mjs';
+import { protagonistSummary, setProtagonistName } from './src/protagonist.mjs';
 import { ensureFormation, setFormation } from './src/formation.mjs';
 import { setTestResources, grantTestCharacter } from './src/test-workbench.mjs';
 import {
@@ -103,6 +103,7 @@ async function api(req, res, url) {
       case 'test_resources': return setTestResources(save, input.resources);
       case 'test_grant': return grantTestCharacter(save, content, input.characterId, input.count);
       case 'story_begin': return beginStoryScene(save, content, input.sceneId);
+      case 'set_protagonist_name': return setProtagonistName(save, input.name);
       case 'story_background': save.story.prologue.backgroundSeen = true; return { backgroundSeen: true };
       case 'story_advance': return advanceStoryBeat(save, content, input.sceneId);
       case 'story_finish': return finishStoryScene(save, content, input.sceneId, false);
@@ -176,7 +177,7 @@ async function api(req, res, url) {
   return json(res, 200, { ok: true, result, ...snapshot(), mode: 'writer' });
 }
 
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
 function staticFile(res, pathname) {
   const requested = pathname === '/' ? '/index.html' : pathname;
   const file = path.resolve(publicDir, `.${requested}`);

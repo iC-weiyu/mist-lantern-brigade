@@ -1,5 +1,7 @@
 ﻿param(
-  [switch]$NoBrowser
+  [switch]$NoBrowser,
+  [switch]$NoShortcut,
+  [string]$ShortcutDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -7,6 +9,8 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $gameUrl = 'http://127.0.0.1:4173/'
 $runtimeDir = Join-Path $projectRoot 'runtime'
 $minNodeMajor = 20
+$launcher = Join-Path $projectRoot '【双击启动】雾灯旅团.cmd'
+$iconFile = Join-Path $projectRoot 'public\favicon.ico'
 
 function Test-GameReady {
   try {
@@ -78,7 +82,48 @@ if (-not (Test-GameReady)) {
 
 if (-not $NoBrowser) { Start-Process $gameUrl }
 
+# 桌面快捷方式：带游戏图标，双击即进。
+# · 没有同名快捷方式 → 建一个；
+# · 已有且指向本启动器 → 只刷新图标；
+# · 已有但指向别的程序 → 一律不动，只提示。
+# 不想要可以删掉，或加 -NoShortcut 参数跳过。
+$shortcutCreated = $false
+$shortcutKept = $false
+if (-not $NoShortcut) {
+  try {
+    $desktop = $ShortcutDir
+    if (-not $desktop) { $desktop = [Environment]::GetFolderPath('Desktop') }
+    if ($desktop -and (Test-Path -LiteralPath $desktop) -and (Test-Path -LiteralPath $launcher)) {
+      $link = Join-Path $desktop '雾灯旅团.lnk'
+      $shell = New-Object -ComObject WScript.Shell
+      $existingTarget = ''
+      if (Test-Path -LiteralPath $link) {
+        try { $existingTarget = $shell.CreateShortcut($link).TargetPath } catch { $existingTarget = '' }
+      }
+      if ($existingTarget -and ($existingTarget -ne $launcher)) {
+        $shortcutKept = $true
+      } else {
+        $shortcut = $shell.CreateShortcut($link)
+        $shortcut.TargetPath = $launcher
+        $shortcut.WorkingDirectory = $projectRoot
+        $shortcut.Description = '雾灯旅团 · 双击启动本地游戏'
+        if (Test-Path -LiteralPath $iconFile) { $shortcut.IconLocation = $iconFile + ',0' }
+        $shortcut.Save()
+        $shortcutCreated = $true
+      }
+    }
+  } catch {
+    Write-Host ('桌面快捷方式创建失败（不影响游戏）：' + $_.Exception.Message) -ForegroundColor DarkYellow
+  }
+}
+
 Write-Host '雾灯旅团已就绪，浏览器会自动打开游戏页面。' -ForegroundColor Green
 Write-Host '再次双击本文件不会重复启动服务，只会打开页面。' -ForegroundColor DarkGray
 Write-Host '关闭这个窗口不会停止游戏；要停止服务请在任务管理器里结束 node.exe。' -ForegroundColor DarkGray
+if ($shortcutCreated) {
+  Write-Host '桌面「雾灯旅团」快捷方式已就绪（带游戏图标），不喜欢可以直接删掉。' -ForegroundColor DarkGray
+}
+if ($shortcutKept) {
+  Write-Host '桌面已有指向其他程序的「雾灯旅团」快捷方式，本次没有改动它。' -ForegroundColor DarkYellow
+}
 Start-Sleep -Seconds 2
