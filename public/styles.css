@@ -27,6 +27,7 @@
 }
 
 * { box-sizing: border-box; }
+html { scroll-padding-top: min(46vh, 420px); }   /* 跳到聚焦元素时，不被顶部固定的队伍条与筛选栏遮住 */
 html, body { min-height: 100%; margin: 0; background: var(--fog-950); color: var(--mist-100); }
 body { min-width: 320px; background-image: radial-gradient(circle at 72% -10%, rgba(96, 159, 143, .16), transparent 34%); }
 body.modal-open { overflow: hidden; }
@@ -312,16 +313,20 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
 .equipment-other-button.active { border-color: var(--herb); color: var(--herb); box-shadow: 0 0 0 2px rgba(41,108,91,.10); }
 .equipment-other-button small { display: block; margin-top: 2px; color: var(--mist-500); font-size: 10px; }
 .equipment-alt-target { max-width: 260px; margin-top: 14px; }
-.equipment-workspace { display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 16px; align-items: start; }
-.equipment-library { min-width: 0; max-height: calc(100vh - 210px); overflow: auto; scrollbar-gutter: stable; }
-.equipment-library .section-head { position: sticky; top: 0; z-index: 1; margin: -24px -24px 14px; padding: 18px 24px 14px; background: rgba(246,248,243,.98); }
+/* 装备库铺满整页宽度；不再做成内层滚动框，整页自然滚动，避免嵌套滚动 */
+.equipment-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.equipment-library { min-width: 0; }
+.equipment-library .section-head { position: sticky; top: 73px; z-index: 2; margin: -24px -24px 14px; padding: 18px 24px 14px; background: rgba(246,248,243,.98); box-shadow: 0 8px 16px rgba(37,61,57,.05); }
 .equipment-check { display: flex; align-items: center; gap: 7px; color: var(--mist-500); font-size: 12px; white-space: nowrap; }
 .equipment-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
 .filter-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-right: auto; }
 .filter-tab { padding: 7px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--fog-850); color: var(--mist-500); cursor: pointer; font-size: 11px; }
 .filter-tab.active { border-color: var(--herb); color: var(--herb); background: rgba(116,170,145,.12); }
 .equipment-filters select { width: auto; min-width: 104px; min-height: 34px; padding: 0 8px; }
-.equipment-library-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+/* 一行三件装备 */
+.equipment-library-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1180px) { .equipment-library-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .equipment-library-list { grid-template-columns: 1fr; } }
 .equipment-card { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 4px 10px; padding: 11px; border: 1px solid var(--border); border-top: 3px solid var(--quality-edge); border-radius: var(--r-md); background: var(--quality-wash); color: var(--mist-100); cursor: grab; text-align: left; transition: transform 140ms, box-shadow 140ms, opacity 140ms; }
 .equipment-card:hover { box-shadow: 0 6px 16px rgba(37,61,57,.10); }
 .equipment-card.equipment-dragging, .equipment-slot.equipment-dragging { transform: scale(1.06); opacity: .72; }
@@ -340,13 +345,16 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
 .equipment-card.worn .equipment-card-set,
 .equipment-card.worn .equipment-card-slot,
 .equipment-card.worn .equipment-card-stat { color: var(--mist-500); opacity: .72; }
-.equipment-preview { position: sticky; top: 90px; min-width: 0; }
+/* 选中装备后，预览卡贴在视口底部：不用来回滚动找它，卸下按钮也一直够得到 */
+.equipment-preview { position: sticky; bottom: 14px; z-index: 3; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; box-shadow: 0 12px 30px rgba(37,61,57,.14); }
 .equipment-preview h3 { margin: 0; font-size: 18px; }
-.equipment-preview-row { display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.equipment-preview .section-head, .equipment-preview .equipment-limit-note, .equipment-preview > .btn { grid-column: 1 / -1; }
+.equipment-preview-row { display: grid; gap: 8px; margin-top: 0; padding: 10px 12px; border-radius: var(--r-sm); background: var(--fog-800); }
 .equipment-preview-row strong, .equipment-preview-row small { display: block; }
 .equipment-preview-row small { margin-top: 4px; color: var(--mist-500); line-height: 1.5; }
 .equipment-preview-row .equipment-stat-line { grid-template-columns: repeat(2, minmax(0,1fr)); }
 .equipment-limit-note { margin-bottom: 0; }
+@media (max-width: 760px) { .equipment-preview { grid-template-columns: 1fr; } }
 .equipment-card:focus-visible, .equipment-slot:focus-visible, .equipment-member-head:focus-visible, .equipment-other-button:focus-visible, .filter-tab:focus-visible { outline: 2px solid var(--herb); outline-offset: 2px; }
 .empty-state { padding: 48px 24px; text-align: center; border-radius: var(--r-lg); background: var(--fog-850); color: var(--mist-500); box-shadow: inset 0 0 0 1px var(--border); }
 .empty-state strong { display: block; margin-bottom: 6px; color: var(--mist-100); }
@@ -416,6 +424,7 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
 .hero-name-field > span { color: var(--mist-500); font-size: 12px; }
 .hero-name-field input { width: 100%; min-height: 46px; padding: 10px 14px; font-size: 17px; color: var(--mist-100); background: var(--fog-800); border: 1px solid var(--border-strong); border-radius: var(--r-sm); }
 .story-name-panel .story-background-subtitle { max-width: 620px; }
+.story-name-panel .story-name-ask { margin-top: 10px; color: var(--mist-300); font-size: 17px; }
 .hero-name-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 12px; }
 .hero-name-row input { width: 100%; min-height: 44px; padding: 0 12px; color: var(--mist-100); background: var(--fog-800); border: 1px solid var(--border-strong); border-radius: var(--r-sm); }
 .story-copy { min-height: 112px; max-width: 660px; color: var(--mist-300); font-size: 15px; line-height: 1.85; text-wrap: pretty; }

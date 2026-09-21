@@ -1262,7 +1262,7 @@ function settingsView() {
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
     <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><p class="fine">初始界面环境音由浏览器实时合成；会馆背景乐播放 public/assets/hall-bgm.mp3，一曲放完静置 30 秒再循环。受自动播放限制，首次点击或按键后才会出声。</p><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音（雨 · 风 · 雷）</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
-    <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">编队站位、战斗阵容、剧情对白与主角档案都使用这个名字。1～12 个字。</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
+    <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">懵懵懂懂间，恍然仿佛听见一声叫唤……是我吗？</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
 }
 
 function renderGachaOverlay() {
@@ -1342,11 +1342,12 @@ function renderStory() {
     return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="hero-name-title"><section class="story-panel story-background story-name-panel">
       <div class="story-scene-head"><div><p class="eyebrow">开始之前 · 报上名来</p><h2 id="hero-name-title">风雨一途，敢问足下高名？</h2></div><span>序章</span></div>
       <div class="story-body">
-        <p class="story-background-subtitle">飘然在这渺渺烟雨，竟不觉来到一舍会馆……“足下高名”？不记得了，或从来没有罢。</p>
+        <p class="story-background-subtitle">飘然在这渺渺烟雨，竟不觉来到一舍会馆……</p>
+        <p class="story-background-subtitle story-name-ask">「足下高名」？不记得了，或从来没有罢。</p>
         <label class="hero-name-field" for="hero-name-input"><span>你的名字</span>
           <input id="hero-name-input" data-hero-name maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-describedby="hero-name-hint">
         </label>
-        <p class="fine" id="hero-name-hint">1～12 个字；真的想不起来，就这样空着确认，此后便唤你「浪人」。</p>
+        <p class="fine" id="hero-name-hint">若是无名无姓，此后唤你「浪人」便是。</p>
       </div>
       <div class="story-actions"><div><button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn primary" data-action="confirm-hero-name">报上名号 <kbd>回车</kbd></button></div></div>
     </section></div>`;

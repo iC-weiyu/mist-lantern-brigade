@@ -6,10 +6,13 @@ const MILESTONES = [
 ];
 
 export const DEFAULT_PROTAGONIST_NAME = '浪人';
+export const LEGACY_DEFAULT_NAME = '会馆负责人';
 export const PROTAGONIST_NAME_LIMIT = 12;
 
 export function ensureProtagonist(save) {
   save.profile ||= { name: DEFAULT_PROTAGONIST_NAME };
+  // 旧版默认名统一迁移到「浪人」：玩家没有自己取过名时，名字就是默认值。
+  if (save.profile.name === LEGACY_DEFAULT_NAME) save.profile.name = DEFAULT_PROTAGONIST_NAME;
   save.profile.protagonist ||= { level: 1 };
   const level = save.profile.protagonist.level;
   if (!Number.isSafeInteger(level) || level < 1) throw new Error('主角等级数据无效');
