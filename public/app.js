@@ -355,7 +355,8 @@ function flashThunder(seconds) {
   thunderFlashTimer = setTimeout(() => screen.classList.remove('thunder-strike'), Math.max(700, seconds * 1000));
 }
 
-function scheduleThunder(delay = 6500 + Math.random() * 4500) {
+// 第一声闷雷等雨声渐入完成（约 6 秒）后再来，之后每 24～66 秒一次
+function scheduleThunder(delay = 15000 + Math.random() * 9000) {
   clearTimeout(thunderTimer);
   thunderTimer = setTimeout(() => {
     if (rainEnabled && !quitState && view === 'title' && !document.hidden && rainAudio?.ctx.state === 'running') {
@@ -378,13 +379,23 @@ function ensureRainAudio() {
   return rainAudio;
 }
 
+// 淡入用指数逼近（setTargetAtTime）：起手极轻、慢慢靠拢目标，不会在末尾"涨"上来；
+// 淡出仍用指数斜坡，收得干净利落。
 function fadeRain(level, seconds = 2.4) {
   const audio = rainAudio; if (!audio) return;
   const now = audio.ctx.currentTime;
   clearTimeout(rainFadeTimer);
   try { audio.master.gain.cancelScheduledValues(now); } catch { /* 上下文已关闭时忽略 */ }
-  audio.master.gain.setValueAtTime(Math.max(0.0001, audio.master.gain.value), now);
-  audio.master.gain.exponentialRampToValueAtTime(Math.max(0.0001, level), now + seconds);
+  const current = Math.max(0.0001, audio.master.gain.value);
+  const target = Math.max(0.0001, level);
+  if (target > current) {
+    // 时间常数取总时长的三分之一：约 1 个常数到 63%，3 个常数基本到位
+    audio.master.gain.setValueAtTime(current, now);
+    audio.master.gain.setTargetAtTime(target, now, Math.max(0.4, seconds / 3));
+  } else {
+    audio.master.gain.setValueAtTime(current, now);
+    audio.master.gain.exponentialRampToValueAtTime(target, now + seconds);
+  }
 }
 
 // 浏览器要求先有一次用户手势才能出声，这里挂一次性解锁。
@@ -407,7 +418,8 @@ function syncRain(active) {
     return;
   }
   const audio = ensureRainAudio(); if (!audio) return;
-  const rise = () => { if (rainEnabled && !quitState && view === 'title' && !rainActive) { rainActive = true; fadeRain(AMBIENT_LEVEL); } };
+  // 渐入约 6 秒：第一次点击/按键后雨声慢慢渗进来，不会突然压上耳朵
+  const rise = () => { if (rainEnabled && !quitState && view === 'title' && !rainActive) { rainActive = true; fadeRain(AMBIENT_LEVEL, 6); } };
   if (audio.ctx.state === 'running') rise();
   else { audio.ctx.resume().then(rise).catch(() => {}); bindAudioUnlock(); }
 }
@@ -463,11 +475,15 @@ function hallMusicFade(target, seconds = 1.6) {
   const music = hallMusic; if (!music) return;
   clearInterval(music.fadeTimer);
   const from = music.element.volume;
+  const rising = target > from;
   const steps = Math.max(1, Math.round(seconds * 20));
   let step = 0;
   music.fadeTimer = setInterval(() => {
     step += 1;
-    music.element.volume = Math.min(1, Math.max(0, from + (target - from) * (step / steps)));
+    const t = step / steps;
+    // 渐入走二次曲线（起手很轻、后段才跟上），渐出保持线性
+    const eased = rising ? t * t : t;
+    music.element.volume = Math.min(1, Math.max(0, from + (target - from) * eased));
     if (step < steps) return;
     clearInterval(music.fadeTimer); music.fadeTimer = null;
     if (target <= 0.001) music.element.pause();
@@ -481,7 +497,7 @@ function startHallMusic() {
   music.element.volume = 0;
   const started = music.element.play();
   if (started?.catch) started.catch(() => { bindAudioUnlock(); });   // 还没拿到用户手势
-  hallMusicFade(hallMusicLevel(), 2.4);
+  hallMusicFade(hallMusicLevel(), 4.5);   // 4.5 秒渐入，进会馆时不会突然响起
 }
 
 function stopHallMusic() {
@@ -924,7 +940,7 @@ function nav() {
     ['home', '⌂', '会馆'], ['battle', '◇', '冒险'], ['recruit', '✦', '招募'], ['roster', '♙', '角色'], ['collection', '◈', '图鉴'], ['equipment', '▣', '装备'], ['settings', '⚙', '设置'],
   ];
   if (model.activeSlotId === 'test') links.splice(6, 0, ['workbench', '⚒', '测试工作台']);
-  return `<aside class="sidebar"><div class="brand"><div class="seal">雾</div><div><strong>雾灯旅团</strong><small>MIST LANTERN</small></div></div>
+  return `<aside class="sidebar"><div class="brand"><div class="seal seal-icon" aria-hidden="true"><img src="/assets/icon-192.png" alt=""></div><div><strong>雾灯旅团</strong><small>MIST LANTERN</small></div></div>
     <nav class="nav" aria-label="主导航">${links.map(([id, icon, label]) => `<button class="nav-link ${view === id ? 'active' : ''}" data-view="${id}"><span class="nav-icon">${icon}</span><span>${label}</span></button>`).join('')}</nav>
     <div class="sidebar-bottom"><p><span class="online-dot"></span>本地服务已连接</p><p style="margin-top:8px">关闭网页后不产生离线收益</p></div></aside>`;
 }
@@ -1260,7 +1276,7 @@ function settingsView() {
   return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><button class="btn ghost" data-action="back-to-title">返回初始界面</button><input type="file" accept="application/json" data-import hidden></div></section>
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
-    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><p class="fine">初始界面环境音由浏览器实时合成；会馆背景乐播放 public/assets/hall-bgm.mp3，一曲放完静置 30 秒再循环。受自动播放限制，首次点击或按键后才会出声。</p><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音（雨 · 风 · 雷）</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
+    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
     <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">懵懵懂懂间，恍然仿佛听见一声叫唤……是我吗？</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
 }
