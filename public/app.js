@@ -211,19 +211,92 @@ function ensureAudio() {
   if (context.state === 'suspended') context.resume().catch(() => {});
 }
 
+// 合成音效统一入口：返回可用的 AudioContext（关闭提示音时返回 null）。
+function soundContext() {
+  if (!gachaSound) return null;
+  const context = getAudioContext(); if (!context) return null;
+  if (context.state === 'suspended') context.resume().catch(() => {});
+  return context;
+}
+
 function chime(kind) {
-  if (!gachaSound || !audioContext) return;
-  const now = audioContext.currentTime;
+  const context = soundContext(); if (!context) return;
+  const now = context.currentTime;
   const notes = kind === 'SSR' ? [220, 440, 659, 880] : kind === 'SR' ? [330, 494] : [392];
   notes.forEach((frequency, index) => {
-    const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain();
+    const oscillator = context.createOscillator(); const gain = context.createGain();
     oscillator.type = kind === 'SSR' ? 'sine' : 'triangle'; oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, now + index * .055);
     gain.gain.exponentialRampToValueAtTime(kind === 'SSR' ? .07 : .035, now + index * .055 + .018);
     gain.gain.exponentialRampToValueAtTime(.0001, now + index * .055 + .34);
-    oscillator.connect(gain).connect(audioContext.destination);
+    oscillator.connect(gain).connect(context.destination);
     oscillator.start(now + index * .055); oscillator.stop(now + index * .055 + .36);
   });
+}
+
+// 裂隙开启：低频轰鸣 + 向上的气流声，给金卡出场起手。
+function riftOpenSound() {
+  const context = soundContext(); if (!context) return;
+  const now = context.currentTime;
+  const buffer = noiseBuffer(context);
+
+  // 低频轰鸣：噪声过 130Hz 低通，慢慢压下去
+  const rumble = context.createBufferSource(); rumble.buffer = buffer; rumble.loop = true;
+  const rumbleFilter = context.createBiquadFilter(); rumbleFilter.type = 'lowpass'; rumbleFilter.frequency.setValueAtTime(320, now); rumbleFilter.frequency.exponentialRampToValueAtTime(90, now + 1.9); rumbleFilter.Q.value = 1.1;
+  const rumbleGain = context.createGain();
+  rumbleGain.gain.setValueAtTime(0.0001, now);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.1, now + 0.5);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.3);
+  rumble.connect(rumbleFilter).connect(rumbleGain).connect(context.destination);
+  rumble.start(now, Math.random() * 3); rumble.stop(now + 2.4);
+
+  // 气流上扫：噪声过带通，从 260Hz 升到 2.6kHz
+  const whoosh = context.createBufferSource(); whoosh.buffer = buffer; whoosh.loop = true;
+  const whooshFilter = context.createBiquadFilter(); whooshFilter.type = 'bandpass'; whooshFilter.frequency.setValueAtTime(260, now + 0.25); whooshFilter.frequency.exponentialRampToValueAtTime(2600, now + 1.7); whooshFilter.Q.value = 1.4;
+  const whooshGain = context.createGain();
+  whooshGain.gain.setValueAtTime(0.0001, now + 0.25);
+  whooshGain.gain.exponentialRampToValueAtTime(0.05, now + 0.9);
+  whooshGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
+  whoosh.connect(whooshFilter).connect(whooshGain).connect(context.destination);
+  whoosh.start(now, Math.random() * 3); whoosh.stop(now + 2);
+}
+
+// 金卡现身：钟声 + 泛音闪烁 + 低频落地，与紫/青的短提示音明显不同。
+function goldRevealSound() {
+  const context = soundContext(); if (!context) return;
+  const now = context.currentTime;
+  const buffer = noiseBuffer(context);
+
+  // 钟体：基音 + 五度 + 高八度 + 一个不协和的亮泛音，衰减很长
+  const bell = [[523.25, 0.075, 2.6], [784.0, 0.045, 2.2], [1046.5, 0.032, 1.9], [1568.0, 0.016, 1.2]];
+  bell.forEach(([frequency, peak, tail]) => {
+    const oscillator = context.createOscillator(); const gain = context.createGain();
+    oscillator.type = 'sine'; oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(now); oscillator.stop(now + tail + 0.1);
+  });
+
+  // 低频落地：98Hz 下滑到 58Hz，给"重量感"
+  const thud = context.createOscillator(); const thudGain = context.createGain();
+  thud.type = 'sine'; thud.frequency.setValueAtTime(98, now); thud.frequency.exponentialRampToValueAtTime(58, now + 0.9);
+  thudGain.gain.setValueAtTime(0.0001, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.09, now + 0.03);
+  thudGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+  thud.connect(thudGain).connect(context.destination);
+  thud.start(now); thud.stop(now + 1.2);
+
+  // 金色闪烁：噪声过带通，快速上扫后散开
+  const shimmer = context.createBufferSource(); shimmer.buffer = buffer; shimmer.loop = true;
+  const shimmerFilter = context.createBiquadFilter(); shimmerFilter.type = 'bandpass'; shimmerFilter.frequency.setValueAtTime(1800, now); shimmerFilter.frequency.exponentialRampToValueAtTime(6200, now + 0.7); shimmerFilter.Q.value = 2.4;
+  const shimmerGain = context.createGain();
+  shimmerGain.gain.setValueAtTime(0.0001, now);
+  shimmerGain.gain.exponentialRampToValueAtTime(0.055, now + 0.16);
+  shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+  shimmer.connect(shimmerFilter).connect(shimmerGain).connect(context.destination);
+  shimmer.start(now, Math.random() * 3); shimmer.stop(now + 1.6);
 }
 
 /* ── 程序合成的环境音：初始界面（雨·风·雷），不依赖任何外部音频素材 ──
@@ -610,7 +683,7 @@ function startContractArrival() {
   later(() => {
     if (gachaPresentation?.phase !== 'flight') return;
     overlay.classList.add('ritual-color'); initGachaCanvas(); chime(gachaPresentation.best);
-    overlay.querySelector('.ritual-message').textContent = gachaPresentation.best === 'SSR' ? '金色契约正在苏醒' : gachaPresentation.best === 'SR' ? '紫色辉光穿过浓雾' : '回应越来越近';
+    overlay.querySelector('.ritual-message').textContent = gachaPresentation.best === 'SSR' ? '烁烁金光万丈，一道身影从中浮现' : gachaPresentation.best === 'SR' ? '一抹紫色辉光穿透深渊裂隙' : '回应越来越近';
   }, 1700);
   later(() => { overlay.classList.add('ritual-release'); }, 2850);
   later(finishContractArrival, 4150 + (cards.length - 1) * 110);
@@ -693,7 +766,8 @@ function revealGachaCard(index) {
   const layer = document.createElement('div'); layer.className = 'gacha-focus-layer';
   if (item.rarity === 'SSR' && !alreadyRevealed) {
     layer.classList.add('ssr-summoning');
-    layer.innerHTML = `<div class="ssr-summon-space" aria-hidden="true"><div class="ssr-mist"></div><div class="ssr-rift">${riftLayers()}</div><div class="ssr-rays"></div><div class="ssr-convergence"></div></div>${summonIntelMarkup(char(item.characterId))}`;
+    layer.innerHTML = `<div class="ssr-summon-space" aria-hidden="true"><div class="ssr-mist"></div><div class="ssr-rift">${riftLayers()}</div><div class="ssr-rift-slit"></div><div class="ssr-emerge-flash"></div><div class="ssr-rays"></div><div class="ssr-convergence"></div></div>${summonIntelMarkup(char(item.characterId))}`;
+    riftOpenSound();   // 裂隙开启：低频轰鸣 + 上扫气流
   }
   layer.append(template.content.querySelector('.gacha-focus'));
   const overlay = document.querySelector('.gacha-overlay');
@@ -728,21 +802,23 @@ function animateSsrReveal(origin, flip = true) {
   const sx = origin ? origin.width / destination.width : .5;
   const sy = origin ? origin.height / destination.height : .5;
   const summon = Boolean(document.querySelector('.ssr-summoning'));
+  // 金卡出场：先从裂隙的细缝里探出（横向被压扁），再撑开、上浮、转向正面。
   gachaTransition = flipper.animate(summon ? [
-    { transform: 'translateY(-55px) scale(0) rotateY(215deg) rotateZ(-18deg)', offset: 0 },
-    { transform: 'translateY(-55px) scale(0) rotateY(215deg) rotateZ(-18deg)', offset: .10 },
-    { transform: 'translateY(-42px) scale(.14) rotateY(207deg) rotateZ(-12deg)', offset: .17 },
-    { transform: 'translateY(-12px) scale(.95) rotateY(183deg) rotateZ(2deg)', offset: .29 },
-    { transform: 'translateY(-16px) scale(.97) rotateY(179deg) rotateZ(-1deg)', offset: .56 },
-    { transform: 'translateY(-10px) scale(.98) rotateY(177deg) rotateZ(1deg)', offset: .78 },
-    { transform: 'translateY(-15px) scale(1.04) rotateY(88deg)', offset: .89 },
+    { transform: 'translateY(-40px) scale(.03, .88) rotateY(215deg) rotateZ(-7deg)', offset: 0 },
+    { transform: 'translateY(-40px) scale(.03, .88) rotateY(215deg) rotateZ(-7deg)', offset: .10 },
+    { transform: 'translateY(-36px) scale(.26, .95) rotateY(209deg) rotateZ(-4deg)', offset: .19 },
+    { transform: 'translateY(-20px) scale(.84, 1.02) rotateY(191deg) rotateZ(1deg)', offset: .28 },
+    { transform: 'translateY(-12px) scale(1.03) rotateY(180deg) rotateZ(-1deg)', offset: .40 },
+    { transform: 'translateY(-16px) scale(.98) rotateY(178deg) rotateZ(1deg)', offset: .60 },
+    { transform: 'translateY(-10px) scale(.99) rotateY(176deg) rotateZ(-1deg)', offset: .78 },
+    { transform: 'translateY(-15px) scale(1.05) rotateY(88deg)', offset: .89 },
     { transform: 'translateY(0) scale(1) rotateY(0deg)', offset: 1 },
   ] : [
     { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy}) rotateY(${flip ? 180 : 0}deg)`, offset: 0 },
     { transform: `translate(${dx * .65}px,${dy * .65}px) scale(${sx + (1 - sx) * .3},${sy + (1 - sy) * .3}) rotateY(${flip ? 100 : 0}deg)`, offset: .42 },
     { transform: 'translate(0,0) scale(1) rotateY(0deg)', offset: 1 },
   ], { duration: summon ? 4400 : flip ? 1250 : 650, easing: summon ? 'linear' : 'cubic-bezier(.22,.68,.24,1)', fill: 'both' });
-  if (summon) later(() => { document.querySelector('.ssr-summoning')?.classList.add('ssr-revealing'); chime('SSR'); }, 3880);
+  if (summon) later(() => { document.querySelector('.ssr-summoning')?.classList.add('ssr-revealing'); goldRevealSound(); }, 3880);
   gachaTransition.finished.then(() => {
     if (gachaPresentation?.phase !== 'ssr-turn') return;
     gachaTransition = null;
@@ -1293,7 +1369,7 @@ function countdown(nextRefreshAt) {
 }
 
 function freeRecruitView() {
-  return `<section class="section free-recruit-section"><div class="section-head"><div><p class="eyebrow">会馆赠礼 · 北京时间</p><h2>免费招募</h2><p>整点常驻单招；每天 23:00 常驻十连、主题单招。次数不累积，同样计入保底和累计招募。</p></div></div><div class="free-recruit-grid">${(model.freeRecruit || []).map((offer) => `<article class="card free-offer"><span class="tag ${offer.cycle === 'daily' ? 'gold' : ''}">${offer.cycle === 'hourly' ? '每个整点' : '每日 23:00'}</span><h3>${offer.title}</h3><p>${offer.locked ? '完成序章后开放' : offer.available ? '本轮剩余 1 次' : '本轮已使用'}</p><small>刷新倒计时 <span data-free-countdown="${offer.nextRefreshAt}">${countdown(offer.nextRefreshAt)}</span></small><button class="btn ${offer.available ? 'primary' : 'ghost'}" data-free-pull="${offer.id}" ${offer.available && model.mode === 'writer' ? '' : 'disabled'}>${offer.locked ? '主题尚未开放' : offer.available ? `免费招募 ${offer.count} 次` : '等待刷新'}</button></article>`).join('')}</div></section>`;
+  return `<section class="section free-recruit-section"><div class="section-head"><div><p class="eyebrow">会馆赠礼 · 一点心意</p><h2>免费招募</h2><p>整点常驻单招；每天 23:00 常驻十连、主题单招。次数不累积，同样计入保底和累计招募。</p></div></div><div class="free-recruit-grid">${(model.freeRecruit || []).map((offer) => `<article class="card free-offer"><span class="tag ${offer.cycle === 'daily' ? 'gold' : ''}">${offer.cycle === 'hourly' ? '每个整点' : '每日 23:00'}</span><h3>${offer.title}</h3><p>${offer.locked ? '完成序章后开放' : offer.available ? '本轮剩余 1 次' : '本轮已使用'}</p><small>刷新倒计时 <span data-free-countdown="${offer.nextRefreshAt}">${countdown(offer.nextRefreshAt)}</span></small><button class="btn ${offer.available ? 'primary' : 'ghost'}" data-free-pull="${offer.id}" ${offer.available && model.mode === 'writer' ? '' : 'disabled'}>${offer.locked ? '主题尚未开放' : offer.available ? `免费招募 ${offer.count} 次` : '等待刷新'}</button></article>`).join('')}</div></section>`;
 }
 
 async function updateFreeClock() {
@@ -1612,7 +1688,8 @@ function render() {
     return;
   }
   syncRain(false);
-  syncBgm(true);
+  // 翻牌演出期间停掉会馆背景乐，避免盖住契约音效；演出结束后自动续上。
+  syncBgm(!gachaPresentation);
   const content = view === 'slots' ? slotsView() : view === 'home' ? homeView() : view === 'battle' ? battleView() : view === 'recruit' ? recruitView() : view === 'roster' ? rosterView() : view === 'collection' ? collectionView() : view === 'equipment' ? equipmentView() : view === 'workbench' ? workbenchView() : settingsView();
   const modalOpen = Boolean(deleteSlotId || gachaPresentation || (view !== 'slots' && (storyReplay || prologueProgress().status === 'reading')) || storyArchiveOpen || collectionDetailId);
   document.body.classList.toggle('modal-open', modalOpen);

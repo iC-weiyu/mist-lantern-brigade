@@ -843,6 +843,28 @@ select[data-party-slot] { border:1px solid var(--quality-edge); border-left-widt
 .ssr-summon-space { position:absolute; inset:-90px -28px -70px; z-index:-1; overflow:hidden; background:radial-gradient(ellipse at 50% 42%,#2c2928 0%,#0b141c 40%,#020509 85%); animation:summon-space-enter 300ms ease-out both; transition:opacity 500ms; }
 .ssr-mist { position:absolute; inset:-25%; opacity:.6; background:radial-gradient(ellipse at 28% 58%,#768b9844,transparent 28%),radial-gradient(ellipse at 65% 35%,#c6ad7440,transparent 30%); filter:blur(24px); animation:summon-mist 5s ease-out both; }
 .ssr-rift { position:absolute; left:50%; top:50%; width:100%; height:100%; transform:translate(-50%,-50%); filter:none; animation:none; }
+/* 金卡出场的裂隙细缝与金光：缝先裂开、卡片从中挤出，随后金光炸开 */
+.ssr-rift-slit { position:absolute; left:50%; top:50%; width:min(320px,44vw); height:min(560px,74vh); transform:translate(-50%,-50%); pointer-events:none; border-radius:50%;
+  background:radial-gradient(ellipse at center,#fff6d8 0%,#ffd16e 26%,#a9761f55 52%,transparent 74%); filter:blur(6px) saturate(1.1);
+  animation:ssr-slit-open 4400ms cubic-bezier(.3,.05,.2,1) both; }
+.ssr-emerge-flash { position:absolute; left:50%; top:50%; width:min(560px,78vw); aspect-ratio:1; transform:translate(-50%,-50%) scale(.2); pointer-events:none; opacity:0; border-radius:50%;
+  background:radial-gradient(circle,#fffaf0 0%,#ffe6a8 18%,#e6bd7255 40%,transparent 70%); filter:blur(10px);
+  animation:ssr-emerge-flash 4400ms linear both; }
+@keyframes ssr-slit-open {
+  0%, 8% { opacity:0; transform:translate(-50%,-50%) scaleX(.02) scaleY(.55); }
+  16% { opacity:.9; transform:translate(-50%,-50%) scaleX(.05) scaleY(.9); }
+  26% { opacity:.85; transform:translate(-50%,-50%) scaleX(.34) scaleY(1.04); }
+  40% { opacity:.5; transform:translate(-50%,-50%) scaleX(.6) scaleY(1); }
+  70% { opacity:.3; transform:translate(-50%,-50%) scaleX(.72) scaleY(1); }
+  100% { opacity:0; transform:translate(-50%,-50%) scaleX(.9) scaleY(1.05); }
+}
+@keyframes ssr-emerge-flash {
+  0%, 15% { opacity:0; transform:translate(-50%,-50%) scale(.2); }
+  20% { opacity:.95; transform:translate(-50%,-50%) scale(.62); }
+  26% { opacity:.7; transform:translate(-50%,-50%) scale(.86); }
+  34% { opacity:.28; transform:translate(-50%,-50%) scale(1); }
+  46%, 100% { opacity:0; transform:translate(-50%,-50%) scale(1.06); }
+}
 .ssr-rays { position:absolute; inset:0; background:conic-gradient(from 14deg at 50% 43%,transparent 0deg 40deg,#f2cf8515 41deg 43deg,transparent 44deg 170deg,#f2cf8512 171deg 174deg,transparent 175deg 240deg,#f2cf8515 241deg 243deg,transparent 244deg); animation:summon-rays 2600ms ease-out both; }
 .ssr-summoning .gacha-focus { z-index:1; }
 .ssr-summoning .gacha-focus-card > :not(small) { opacity:0; }
@@ -853,7 +875,8 @@ select[data-party-slot] { border:1px solid var(--quality-edge); border-left-widt
 .ssr-summoning.ssr-revealing .gacha-focus-summary, .ssr-summoning.ssr-revealing .reveal-badge { animation-delay:460ms; }
 .ssr-summoning.summon-skip .gacha-focus-card > :not(small) { opacity:1; animation:none; }
 .phase-returning .ssr-summon-space { opacity:0; }
-.reduce-motion .ssr-summon-space, .reduce-motion .ssr-mist, .reduce-motion .ssr-rift, .reduce-motion .ssr-rays { animation:none; }
+.reduce-motion .ssr-summon-space, .reduce-motion .ssr-mist, .reduce-motion .ssr-rift, .reduce-motion .ssr-rays, .reduce-motion .ssr-rift-slit, .reduce-motion .ssr-emerge-flash { animation:none; }
+.reduce-motion .ssr-rift-slit, .reduce-motion .ssr-emerge-flash { opacity:0; }
 .reduce-motion .ssr-summoning .gacha-focus-card > :not(small) { opacity:1; animation:none; }
 @keyframes summon-space-enter { from { opacity:0; } to { opacity:1; } }
 @keyframes summon-mist { from { transform:scale(.8) translateX(-3%); } to { transform:scale(1.2) translateX(3%); } }
