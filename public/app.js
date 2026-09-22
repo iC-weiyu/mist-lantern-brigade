@@ -279,7 +279,7 @@ function playGoldSfx() {
   const started = sfx.element.play();
   if (started?.catch) started.catch(() => {});   // 浏览器没给播放许可时静默跳过
   fadeGoldSfx(GOLD_SFX_LEVEL, GOLD_SFX_FADE_IN);
-  const total = Number.isFinite(sfx.element.duration) && sfx.element.duration > 0 ? sfx.element.duration : 8.7;
+  const total = Number.isFinite(sfx.element.duration) && sfx.element.duration > 0 ? sfx.element.duration : 7.7;
   sfx.endTimer = setTimeout(() => fadeGoldSfx(0.0001, 0.6), Math.max(1000, (total - 0.6) * 1000));
 }
 
