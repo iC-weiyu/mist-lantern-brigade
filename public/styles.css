@@ -251,8 +251,7 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
 .collection-card:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 1px var(--border-strong), 0 12px 32px rgba(37,61,57,.10); }
 .collection-card.rarity-ssr { box-shadow: inset 0 0 0 1px rgba(168,121,43,.32); background: linear-gradient(180deg, rgba(247,235,209,.7), #fffdf7 52%); }
 .collection-card.rarity-sr { box-shadow: inset 0 0 0 1px rgba(169,132,234,.25); }
-.collection-card.undiscovered { filter: saturate(.48); opacity: .64; }
-.collection-card.undiscovered:hover { filter: saturate(.65); opacity: .8; }
+/* 「未获得」的完整样式在下方 collection 段落末尾（压暗灰底），这里不再用透明度变淡 */
 .collection-id { position: absolute; top: 12px; right: 12px; color: var(--mist-650); font: 600 10px/1 monospace; }
 .collection-new { position: absolute; top: 10px; left: 10px; padding: 4px 7px; border-radius: 10px; color: #c7f0d9; background: rgba(116,170,145,.16); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .collection-monogram { width: 72px; height: 72px; margin: 26px auto 18px; align-self: center; display: grid; place-items: center; border-radius: 42% 58% 54% 46%; color: var(--mist-300); background: rgba(155,200,196,.08); box-shadow: inset 0 0 0 1px var(--border); font: 600 28px/1 Georgia, "Noto Serif SC", serif; }
@@ -678,6 +677,23 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
 .collection-card.rarity-ssr, .pull-card.rarity-ssr, .character-card.rarity-ssr { background:linear-gradient(150deg,var(--rarity-ssr-wash),var(--fog-850) 85%); }
 .character-card .avatar, .party-member .portrait, .collection-card .collection-monogram { color:var(--quality-ink); background:var(--quality-wash); box-shadow:inset 0 0 0 1px var(--quality-edge); }
 .character-card .tag, .collection-card .tag, .collection-detail .tag, .pull-card .tag { color:var(--quality-ink); background:var(--quality-wash); box-shadow:inset 0 0 0 1px var(--quality-edge); }
+/* 未获得的角色卡：整块压暗（灰底 + 降饱和 + 文字压灰），与已获得拉开距离。
+   写在稀有度背景之后，避免被 .rarity-ssr / .rarity-sr 的背景覆盖。 */
+.collection-card.undiscovered,
+.collection-card.undiscovered.rarity-ssr,
+.collection-card.undiscovered.rarity-sr {
+  background: linear-gradient(150deg, #d5dcd8, #c6cec9 88%);
+  border-top-color: rgba(37,61,57,.22);
+  box-shadow: inset 0 0 0 1px rgba(37,61,57,.16);
+  filter: saturate(.32);
+  opacity: 1;
+}
+.collection-card.undiscovered .collection-monogram { color: var(--mist-500); background: rgba(37,61,57,.07); box-shadow: inset 0 0 0 1px rgba(37,61,57,.14); }
+.collection-card.undiscovered > strong,
+.collection-card.undiscovered .collection-name { color: var(--mist-500); }
+.collection-card.undiscovered > small,
+.collection-card.undiscovered .collection-owned { color: var(--mist-650); opacity: .8; }
+.collection-card.undiscovered:hover { background: linear-gradient(150deg, #dde4e0, #cfd6d2 88%); filter: saturate(.45); box-shadow: inset 0 0 0 1px rgba(37,61,57,.22), 0 12px 32px rgba(37,61,57,.10); transform: translateY(-2px); }
 select[data-party-slot], select[data-party-slot] option { color:var(--quality-ink); background:var(--quality-wash); font-weight:600; }
 select[data-party-slot] { border:1px solid var(--quality-edge); border-left-width:4px; }
 .rarity-sr .collection-detail-art { background:linear-gradient(150deg,#eee1fa,#faf6ff); }
@@ -879,8 +895,6 @@ select[data-party-slot] { border:1px solid var(--quality-edge); border-left-widt
 .delete-confirm-check strong { color:var(--mist-100); font-size:13px; }
 .delete-confirm-check small { color:var(--mist-500); font-size:11px; }
 .delete-save-actions { display:grid; grid-template-columns:1fr 1.35fr; gap:8px; margin-top:20px; }
-.music-status { margin:10px 0 0; padding:8px 10px; border-radius:var(--r-sm); background:rgba(41,108,91,.06); }
-.music-status.warn { color:#8a5a12; background:rgba(168,121,43,.10); }
 .bgm-volume-row { display:flex; align-items:center; gap:10px; }
 .bgm-volume-row input[type="range"] { flex:1 1 auto; width:auto; min-width:120px; padding:0; background:transparent; border:0; accent-color:var(--herb); }
 .bgm-volume-row span { min-width:44px; text-align:right; font-size:12px; }

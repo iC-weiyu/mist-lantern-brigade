@@ -46,6 +46,7 @@ let collectionRole = 'all';
 let collectionOwned = 'all';
 let collectionGroup = 'all';
 let collectionUnownedFirst = false;
+let collectionSort = 'rarity';
 let collectionDetailId = null;
 let storyDisplayBeat = null;
 let storyReplay = null;
@@ -424,51 +425,64 @@ function syncRain(active) {
   else { audio.ctx.resume().then(rise).catch(() => {}); bindAudioUnlock(); }
 }
 
-/* ── 会馆背景乐：优先播放 public/assets/hall-bgm.* 音频文件 ──
-   播完一曲后等待 30 秒再从头播放；离开会馆或回到初始界面时淡出并暂停，再进入时从中断处继续。 */
+/* ── 会馆背景乐：播放列表 ──
+   优先按 hall-bgm-1 / -2 / … 顺序探测（每个序号依次试 mp3 → m4a → ogg → wav → flac），
+   一组序号都不存在时退回单曲 hall-bgm.*；固定顺序循环，每首放完等 30 秒再放下首。
+   离开会馆或回到初始界面时淡出并暂停，再进入时从上一首的中断处继续。 */
 const HALL_MUSIC_FILES = ['mp3', 'm4a', 'ogg', 'wav', 'flac'];
 const HALL_MUSIC_GAP_MS = 30_000;
+const HALL_MUSIC_MAX_TRACKS = 12;
 
 function hallMusicLevel() { return Math.min(1, Math.max(0, bgmVolume / 100)); }
 
-function hallMusicFileName() {
-  return hallMusic ? hallMusic.src.split('/').pop() : '';
+// 试一个候选地址能否当音频加载；成功就把元素交回去复用。
+function tryLoadTrack(element, src) {
+  return new Promise((resolve) => {
+    const onLoaded = () => { cleanup(); resolve(src); };
+    const onError = () => { cleanup(); resolve(null); };
+    const cleanup = () => {
+      element.removeEventListener('loadedmetadata', onLoaded);
+      element.removeEventListener('error', onError);
+    };
+    element.addEventListener('loadedmetadata', onLoaded, { once: true });
+    element.addEventListener('error', onError, { once: true });
+    element.src = src;
+  });
 }
 
-function hallMusicStatusText() {
-  if (hallMusicState === 'ready') {
-    const total = Math.round(hallMusic?.duration || 0);
-    const clock = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-    return `已载入 ${hallMusicFileName()} · 时长 ${clock}，播完等 30 秒再循环`;
-  }
-  if (hallMusicState === 'missing') return '未找到音频文件：把音乐放到 public/assets/hall-bgm.mp3（.m4a／.ogg／.wav／.flac 也可），会馆内目前没有背景音乐';
-  return '正在检查音频文件……';
-}
-
-// 依次探测候选扩展名，全部 404 就进入 missing。
-function probeHallMusic(index = 0) {
+// 探测播放列表：先按序号，序号断档就停；一个都没有时退回单曲。
+async function probeHallMusic() {
   const AudioCtor = window.Audio;
   if (!AudioCtor) { hallMusicState = 'missing'; render(); return; }
-  if (index >= HALL_MUSIC_FILES.length) { hallMusicState = 'missing'; render(); return; }
-  const src = `/assets/hall-bgm.${HALL_MUSIC_FILES[index]}`;
   const element = new AudioCtor();
   element.preload = 'auto';
   element.volume = 0;
-  element.src = src;
-  const settle = (ok) => {
-    element.removeEventListener('loadedmetadata', onLoaded);
-    element.removeEventListener('error', onError);
-    if (!ok) { probeHallMusic(index + 1); return; }
-    element.addEventListener('ended', onHallMusicEnded);
-    hallMusic = { element, src, duration: element.duration || 0, fadeTimer: null, autoPaused: false };
-    hallMusicState = 'ready';
-    render();
-    syncHallMusic(!quitState && view !== 'title');
-  };
-  const onLoaded = () => settle(true);
-  const onError = () => settle(false);
-  element.addEventListener('loadedmetadata', onLoaded, { once: true });
-  element.addEventListener('error', onError, { once: true });
+
+  const tracks = [];
+  for (let number = 1; number <= HALL_MUSIC_MAX_TRACKS; number += 1) {
+    let found = null;
+    for (const extension of HALL_MUSIC_FILES) {
+      found = await tryLoadTrack(element, `/assets/hall-bgm-${number}.${extension}`);
+      if (found) break;
+    }
+    if (!found) break;                       // 序号断档：认为播放列表到此为止
+    tracks.push(found);
+  }
+  if (!tracks.length) {
+    for (const extension of HALL_MUSIC_FILES) {
+      const single = await tryLoadTrack(element, `/assets/hall-bgm.${extension}`);
+      if (single) { tracks.push(single); break; }
+    }
+  }
+
+  if (!tracks.length) { hallMusicState = 'missing'; render(); return; }
+
+  element.addEventListener('ended', onHallMusicEnded);
+  element.addEventListener('error', onHallMusicPlaybackError);
+  hallMusic = { element, tracks, index: 0, duration: 0, fadeTimer: null, autoPaused: false, errorStreak: 0 };
+  hallMusicState = 'ready';
+  render();
+  syncHallMusic(!quitState && view !== 'title');
 }
 
 function hallMusicFade(target, seconds = 1.6) {
@@ -490,14 +504,25 @@ function hallMusicFade(target, seconds = 1.6) {
   }, 50);
 }
 
-function startHallMusic() {
+// 播放指定序号的曲目；src 未变时保持播放位置（用于"回到会馆续播"）。
+function playHallTrack(index) {
   const music = hallMusic; if (!music) return;
-  clearTimeout(hallMusicGapTimer); hallMusicGapTimer = null;
-  if (music.element.ended || (music.duration && music.element.currentTime >= music.duration - 0.1)) music.element.currentTime = 0;
+  const total = music.tracks.length;
+  music.index = ((index % total) + total) % total;
+  const src = music.tracks[music.index];
+  const absolute = new URL(src, window.location?.href || 'http://localhost/').href;
+  if (music.element.src !== absolute) { music.element.src = src; music.duration = 0; music.element.currentTime = 0; }
   music.element.volume = 0;
   const started = music.element.play();
   if (started?.catch) started.catch(() => { bindAudioUnlock(); });   // 还没拿到用户手势
-  hallMusicFade(hallMusicLevel(), 4.5);   // 4.5 秒渐入，进会馆时不会突然响起
+  hallMusicFade(hallMusicLevel(), 4.5);   // 4.5 秒渐入，换曲/进会馆都不会突然响起
+}
+
+function startHallMusic() {
+  const music = hallMusic; if (!music) return;
+  clearTimeout(hallMusicGapTimer); hallMusicGapTimer = null;
+  music.errorStreak = 0;
+  playHallTrack(music.index);
 }
 
 function stopHallMusic() {
@@ -505,14 +530,24 @@ function stopHallMusic() {
   if (hallMusic) hallMusicFade(0, 1.2);
 }
 
-// 一曲放完：等 30 秒再放下一遍。
+// 一曲放完：等 30 秒再放下首（最后一首接回第一首）。
 function onHallMusicEnded() {
-  if (!bgmEnabled || quitState || view === 'title') return;
+  const music = hallMusic;
+  if (!music || !bgmEnabled || quitState || view === 'title') return;
   clearTimeout(hallMusicGapTimer);
   hallMusicGapTimer = setTimeout(() => {
     hallMusicGapTimer = null;
-    if (bgmEnabled && !quitState && view !== 'title' && !document.hidden) startHallMusic();
+    if (bgmEnabled && !quitState && view !== 'title' && !document.hidden) playHallTrack(music.index + 1);
   }, HALL_MUSIC_GAP_MS);
+}
+
+// 某首歌加载/播放失败：跳到下一首，连续失败到超过曲目数就停，避免死循环。
+function onHallMusicPlaybackError() {
+  const music = hallMusic;
+  if (!music || music.element.paused) return;
+  music.errorStreak = (music.errorStreak || 0) + 1;
+  if (music.errorStreak > music.tracks.length) { stopHallMusic(); return; }
+  playHallTrack(music.index + 1);
 }
 
 function syncHallMusic(active) {
@@ -1129,11 +1164,16 @@ function collectionAcquisition(character) {
 
 function stableCharacterSort(a, b) {
   const rarity = { SSR: 3, SR: 2, R: 1 };
+  // 1) 稀有度始终是第一关键字
+  if (rarity[b.rarity] !== rarity[a.rarity]) return rarity[b.rarity] - rarity[a.rarity];
+  // 2) 勾选「未获得优先」时，只在同一稀有度内部把未获得的排前面
   if (collectionUnownedFirst) {
     const ownedDifference = Number(Boolean(model.save.owned[a.id])) - Number(Boolean(model.save.owned[b.id]));
     if (ownedDifference) return ownedDifference;
   }
-  if (rarity[b.rarity] !== rarity[a.rarity]) return rarity[b.rarity] - rarity[a.rarity];
+  // 3) 选「速度」排序时，同一稀有度（与同一拥有状态）内按 SPD 从快到慢
+  if (collectionSort === 'spd' && (b.speed ?? 0) !== (a.speed ?? 0)) return (b.speed ?? 0) - (a.speed ?? 0);
+  // 4) 稳定 ID 兜底，保证顺序可复现
   const prefix = a.id[0].localeCompare(b.id[0]);
   return prefix || Number(a.id.slice(1)) - Number(b.id.slice(1));
 }
@@ -1161,7 +1201,7 @@ function collectionView() {
     return `<button class="collection-card rarity-${character.rarity.toLowerCase()} ${isFound ? 'found' : 'undiscovered'}" data-collection-id="${character.id}" aria-label="查看 ${esc(character.title)} ${esc(character.name)} 图鉴详情">
       <span class="collection-id">${character.id}</span>${newIds.has(character.id) ? '<span class="collection-new">NEW</span>' : ''}
       <span class="collection-monogram">${esc(character.name[0])}</span><span class="tag ${character.rarity === 'SSR' ? 'gold' : ''}">${character.rarity}</span>
-      <strong class="collection-title">${esc(character.title)}</strong><span class="collection-name">${esc(character.name)}</span><small>${esc(character.role)} · ${isFound ? '已点亮' : '未获得'}</small>
+      <strong class="collection-title">${esc(character.title)}</strong><span class="collection-name">${esc(character.name)}</span><small>${esc(character.role)}${collectionSort === 'spd' ? ` · SPD ${character.speed ?? '—'}` : ''} · ${isFound ? '已点亮' : '未获得'}</small>
       ${own ? `<span class="collection-owned">Lv.${own.level} · ${own.breakthrough}突</span>` : '<span class="collection-owned muted">可预览技能与获取途径</span>'}
     </button>`;
   }).join('');
@@ -1173,8 +1213,9 @@ function collectionView() {
       <select aria-label="职能筛选" data-collection-role><option value="all">全部职能</option>${roles.map((value) => `<option value="${esc(value)}" ${collectionRole === value ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select>
       <select aria-label="拥有状态筛选" data-collection-owned><option value="all">全部状态</option><option value="owned" ${collectionOwned === 'owned' ? 'selected' : ''}>已拥有</option><option value="unowned" ${collectionOwned === 'unowned' ? 'selected' : ''}>未拥有</option></select>
       <select aria-label="来源分组筛选" data-collection-group><option value="all">全部分组</option><option value="low" ${collectionGroup === 'low' ? 'selected' : ''}>基础成员</option><option value="standard" ${collectionGroup === 'standard' ? 'selected' : ''}>常驻 SSR</option><option value="past" ${collectionGroup === 'past' ? 'selected' : ''}>往期主题</option><option value="current" ${collectionGroup === 'current' ? 'selected' : ''}>当前主题</option></select>
+      <select aria-label="排序方式" data-collection-sort><option value="rarity" ${collectionSort === 'rarity' ? 'selected' : ''}>按稀有度</option><option value="spd" ${collectionSort === 'spd' ? 'selected' : ''}>按速度 SPD</option></select>
       <label class="fine collection-check"><input type="checkbox" data-collection-unowned-first ${collectionUnownedFirst ? 'checked' : ''}> 未获得优先</label><button class="btn small ghost" data-action="clear-collection-filters">清除筛选</button></section>
-    <div class="section-head collection-count"><div><h2>角色记录 · ${visible.length}</h2><p>默认按 SSR → SR → R 与稳定 ID 排序。</p></div></div>
+    <div class="section-head collection-count"><div><h2>角色记录 · ${visible.length}</h2><p>${collectionSort === 'spd' ? '先从 SSR 到 R 分组，组内按速度 SPD 从快到慢' : '默认按 SSR → SR → R 与稳定 ID 排序'}${collectionUnownedFirst ? '；同一稀有度内未获得的排前面' : ''}。</p></div></div>
     ${visible.length ? `<section class="collection-grid">${cards}</section>` : '<section class="empty-state"><strong>没有符合条件的角色</strong>调整条件，或点击“清除筛选”恢复全部图鉴。</section>'}`;
 }
 
@@ -1276,7 +1317,7 @@ function settingsView() {
   return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><button class="btn ghost" data-action="back-to-title">返回初始界面</button><input type="file" accept="application/json" data-import hidden></div></section>
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
-    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><p class="fine music-status ${hallMusicState === 'missing' ? 'warn' : ''}">${hallMusicStatusText()}</p></section>
+    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
     <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">懵懵懂懂间，恍然仿佛听见一声叫唤……是我吗？</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
 }
@@ -1830,7 +1871,7 @@ app.addEventListener('click', async (event) => {
   if (action === 'close-story-archive') { storyArchiveOpen = false; render(); return; }
   if (action === 'close-collection-detail') { collectionDetailId = null; render(); return; }
   if (action === 'apply-collection-search') { collectionSearch = document.querySelector('[data-collection-search]')?.value || ''; render(); return; }
-  if (action === 'clear-collection-filters') { collectionSearch = ''; collectionRarity = 'all'; collectionRole = 'all'; collectionOwned = 'all'; collectionGroup = 'all'; collectionUnownedFirst = false; render(); return; }
+  if (action === 'clear-collection-filters') { collectionSearch = ''; collectionRarity = 'all'; collectionRole = 'all'; collectionOwned = 'all'; collectionGroup = 'all'; collectionUnownedFirst = false; collectionSort = 'rarity'; render(); return; }
   if (action === 'pause-battle') { await act('battle_pause', { reason: '玩家立即暂停' }); return; }
   if (action === 'resume-battle') { await act('battle_resume'); return; }
   if (action === 'battle-stop-after') { if (pending) { queuedStopAfter = true; toast('已记录：本场结算后汇总'); return; } await act('battle_stop_after', {}, { quiet: true }); return; }
@@ -1869,6 +1910,7 @@ app.addEventListener('change', async (event) => {
   if (event.target.matches('[data-collection-owned]')) { collectionOwned = event.target.value; render(); return; }
   if (event.target.matches('[data-collection-group]')) { collectionGroup = event.target.value; render(); return; }
   if (event.target.matches('[data-collection-unowned-first]')) { collectionUnownedFirst = event.target.checked; render(); return; }
+  if (event.target.matches('[data-collection-sort]')) { collectionSort = event.target.value === 'spd' ? 'spd' : 'rarity'; render(); return; }
   if (event.target.matches('[data-equipment-unworn-first]')) { equipmentUnwornFirst = event.target.checked; render(); return; }
   if (event.target.matches('[data-equipment-rarity]')) { equipmentRarityFilter = event.target.value; render(); return; }
   if (event.target.matches('[data-equipment-set]')) { equipmentSetFilter = event.target.value; render(); return; }
