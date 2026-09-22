@@ -30,6 +30,7 @@ let rainEnabled = localStorage.getItem('mist-rain') !== 'off';
 let bgmEnabled = localStorage.getItem('mist-bgm') !== 'off';
 let bgmVolume = Number(localStorage.getItem('mist-bgm-volume') ?? 55);
 if (!Number.isFinite(bgmVolume) || bgmVolume < 0 || bgmVolume > 100) bgmVolume = 55;
+let goldSfx = null;
 let hallMusic = null;
 let hallMusicState = 'idle';   // idle：未检查 | probing：检查中 | ready：已载入 | missing：没有文件
 let hallMusicGapTimer = null;
@@ -234,69 +235,60 @@ function chime(kind) {
   });
 }
 
-// 裂隙开启：低频轰鸣 + 向上的气流声，给金卡出场起手。
-function riftOpenSound() {
-  const context = soundContext(); if (!context) return;
-  const now = context.currentTime;
-  const buffer = noiseBuffer(context);
+/* ── 金卡专属音效：public/assets/gold-reveal.m4a ──
+   点击金卡的那一刻开始播放并渐入；提前跳过或返回卡阵时立刻渐出停止；自然播完前也做一次渐出。 */
+const GOLD_SFX_SRC = '/assets/gold-reveal.m4a';
+const GOLD_SFX_LEVEL = 0.85;
+const GOLD_SFX_FADE_IN = 0.8;
+const GOLD_SFX_FADE_OUT = 0.5;
 
-  // 低频轰鸣：噪声过 130Hz 低通，慢慢压下去
-  const rumble = context.createBufferSource(); rumble.buffer = buffer; rumble.loop = true;
-  const rumbleFilter = context.createBiquadFilter(); rumbleFilter.type = 'lowpass'; rumbleFilter.frequency.setValueAtTime(320, now); rumbleFilter.frequency.exponentialRampToValueAtTime(90, now + 1.9); rumbleFilter.Q.value = 1.1;
-  const rumbleGain = context.createGain();
-  rumbleGain.gain.setValueAtTime(0.0001, now);
-  rumbleGain.gain.exponentialRampToValueAtTime(0.1, now + 0.5);
-  rumbleGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.3);
-  rumble.connect(rumbleFilter).connect(rumbleGain).connect(context.destination);
-  rumble.start(now, Math.random() * 3); rumble.stop(now + 2.4);
-
-  // 气流上扫：噪声过带通，从 260Hz 升到 2.6kHz
-  const whoosh = context.createBufferSource(); whoosh.buffer = buffer; whoosh.loop = true;
-  const whooshFilter = context.createBiquadFilter(); whooshFilter.type = 'bandpass'; whooshFilter.frequency.setValueAtTime(260, now + 0.25); whooshFilter.frequency.exponentialRampToValueAtTime(2600, now + 1.7); whooshFilter.Q.value = 1.4;
-  const whooshGain = context.createGain();
-  whooshGain.gain.setValueAtTime(0.0001, now + 0.25);
-  whooshGain.gain.exponentialRampToValueAtTime(0.05, now + 0.9);
-  whooshGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
-  whoosh.connect(whooshFilter).connect(whooshGain).connect(context.destination);
-  whoosh.start(now, Math.random() * 3); whoosh.stop(now + 2);
+function goldSfxPlayer() {
+  if (goldSfx) return goldSfx;
+  const AudioCtor = window.Audio; if (!AudioCtor) return null;
+  const element = new AudioCtor();
+  element.preload = 'auto';
+  element.volume = 0;
+  element.src = GOLD_SFX_SRC;
+  goldSfx = { element, fadeTimer: null, endTimer: null };
+  return goldSfx;
 }
 
-// 金卡现身：钟声 + 泛音闪烁 + 低频落地，与紫/青的短提示音明显不同。
-function goldRevealSound() {
-  const context = soundContext(); if (!context) return;
-  const now = context.currentTime;
-  const buffer = noiseBuffer(context);
+function fadeGoldSfx(target, seconds) {
+  const sfx = goldSfx; if (!sfx) return;
+  clearInterval(sfx.fadeTimer);
+  const from = sfx.element.volume;
+  const rising = target > from;
+  const steps = Math.max(1, Math.round(seconds * 20));
+  let step = 0;
+  sfx.fadeTimer = setInterval(() => {
+    step += 1;
+    const t = step / steps;
+    sfx.element.volume = Math.min(1, Math.max(0, from + (target - from) * (rising ? t * t : t)));
+    if (step < steps) return;
+    clearInterval(sfx.fadeTimer); sfx.fadeTimer = null;
+    if (target <= 0.001) sfx.element.pause();
+  }, 50);
+}
 
-  // 钟体：基音 + 五度 + 高八度 + 一个不协和的亮泛音，衰减很长
-  const bell = [[523.25, 0.075, 2.6], [784.0, 0.045, 2.2], [1046.5, 0.032, 1.9], [1568.0, 0.016, 1.2]];
-  bell.forEach(([frequency, peak, tail]) => {
-    const oscillator = context.createOscillator(); const gain = context.createGain();
-    oscillator.type = 'sine'; oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(peak, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start(now); oscillator.stop(now + tail + 0.1);
-  });
+function playGoldSfx() {
+  if (!gachaSound) return;
+  const sfx = goldSfxPlayer(); if (!sfx) return;
+  clearTimeout(sfx.endTimer);
+  sfx.element.currentTime = 0;
+  sfx.element.volume = 0;
+  const started = sfx.element.play();
+  if (started?.catch) started.catch(() => {});   // 浏览器没给播放许可时静默跳过
+  fadeGoldSfx(GOLD_SFX_LEVEL, GOLD_SFX_FADE_IN);
+  const total = Number.isFinite(sfx.element.duration) && sfx.element.duration > 0 ? sfx.element.duration : 8.7;
+  sfx.endTimer = setTimeout(() => fadeGoldSfx(0.0001, 0.6), Math.max(1000, (total - 0.6) * 1000));
+}
 
-  // 低频落地：98Hz 下滑到 58Hz，给"重量感"
-  const thud = context.createOscillator(); const thudGain = context.createGain();
-  thud.type = 'sine'; thud.frequency.setValueAtTime(98, now); thud.frequency.exponentialRampToValueAtTime(58, now + 0.9);
-  thudGain.gain.setValueAtTime(0.0001, now);
-  thudGain.gain.exponentialRampToValueAtTime(0.09, now + 0.03);
-  thudGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
-  thud.connect(thudGain).connect(context.destination);
-  thud.start(now); thud.stop(now + 1.2);
-
-  // 金色闪烁：噪声过带通，快速上扫后散开
-  const shimmer = context.createBufferSource(); shimmer.buffer = buffer; shimmer.loop = true;
-  const shimmerFilter = context.createBiquadFilter(); shimmerFilter.type = 'bandpass'; shimmerFilter.frequency.setValueAtTime(1800, now); shimmerFilter.frequency.exponentialRampToValueAtTime(6200, now + 0.7); shimmerFilter.Q.value = 2.4;
-  const shimmerGain = context.createGain();
-  shimmerGain.gain.setValueAtTime(0.0001, now);
-  shimmerGain.gain.exponentialRampToValueAtTime(0.055, now + 0.16);
-  shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
-  shimmer.connect(shimmerFilter).connect(shimmerGain).connect(context.destination);
-  shimmer.start(now, Math.random() * 3); shimmer.stop(now + 1.6);
+// 提前退出（快进 / 返回卡阵 / 关闭演出）时立刻淡出停止
+function stopGoldSfx() {
+  const sfx = goldSfx; if (!sfx) return;
+  clearTimeout(sfx.endTimer);
+  if (sfx.element.paused) return;
+  fadeGoldSfx(0.0001, GOLD_SFX_FADE_OUT);
 }
 
 /* ── 程序合成的环境音：初始界面（雨·风·雷），不依赖任何外部音频素材 ──
@@ -757,7 +749,7 @@ function revealGachaCard(index) {
   const source = document.querySelector(`[data-gacha-card="${index}"]`);
   const origin = source?.getBoundingClientRect();
   gachaPresentation.revealedIndices.add(index); persistGachaProgress(false);
-  if (!alreadyRevealed) chime(item.rarity);
+  if (!alreadyRevealed && item.rarity !== 'SSR') chime(item.rarity);   // 金卡交给专属音效
   for (const timer of gachaTimers) clearTimeout(timer); gachaTimers = [];
   gachaPresentation.focusIndex = index;
   gachaPresentation.phase = gachaReduceMotion ? 'focus' : 'ssr-turn';
@@ -767,7 +759,7 @@ function revealGachaCard(index) {
   if (item.rarity === 'SSR' && !alreadyRevealed) {
     layer.classList.add('ssr-summoning');
     layer.innerHTML = `<div class="ssr-summon-space" aria-hidden="true"><div class="ssr-mist"></div><div class="ssr-rift">${riftLayers()}</div><div class="ssr-rift-slit"></div><div class="ssr-emerge-flash"></div><div class="ssr-rays"></div><div class="ssr-convergence"></div></div>${summonIntelMarkup(char(item.characterId))}`;
-    riftOpenSound();   // 裂隙开启：低频轰鸣 + 上扫气流
+    playGoldSfx();   // 点击金卡的那一刻起播，带渐入
   }
   layer.append(template.content.querySelector('.gacha-focus'));
   const overlay = document.querySelector('.gacha-overlay');
@@ -818,7 +810,7 @@ function animateSsrReveal(origin, flip = true) {
     { transform: `translate(${dx * .65}px,${dy * .65}px) scale(${sx + (1 - sx) * .3},${sy + (1 - sy) * .3}) rotateY(${flip ? 100 : 0}deg)`, offset: .42 },
     { transform: 'translate(0,0) scale(1) rotateY(0deg)', offset: 1 },
   ], { duration: summon ? 4400 : flip ? 1250 : 650, easing: summon ? 'linear' : 'cubic-bezier(.22,.68,.24,1)', fill: 'both' });
-  if (summon) later(() => { document.querySelector('.ssr-summoning')?.classList.add('ssr-revealing'); goldRevealSound(); }, 3880);
+  if (summon) later(() => { document.querySelector('.ssr-summoning')?.classList.add('ssr-revealing'); }, 3880);
   gachaTransition.finished.then(() => {
     if (gachaPresentation?.phase !== 'ssr-turn') return;
     gachaTransition = null;
@@ -833,6 +825,7 @@ function animateSsrReveal(origin, flip = true) {
 
 function returnToGachaGrid() {
   if (!gachaPresentation || gachaPresentation.phase === 'returning') return;
+  stopGoldSfx();   // 提前返回卡阵：金卡音效立刻淡出
   const index = gachaPresentation.focusIndex;
   const source = document.querySelector(`[data-gacha-card="${index}"]`);
   const flipper = document.querySelector('.gacha-focus-flipper');
@@ -868,6 +861,7 @@ function skipGachaMotion() {
   if (!gachaPresentation) return;
   if (gachaPresentation.phase === 'flight') { finishContractArrival(); return; }
   clearGachaTimers();
+  if (['ssr-turn', 'ssr-burst'].includes(gachaPresentation.phase)) stopGoldSfx();   // 快进跳过：金卡音效立刻淡出
   if (['ssr-turn', 'ssr-burst'].includes(gachaPresentation.phase) && document.querySelector('.gacha-focus-layer')) { document.querySelector('.gacha-focus-layer').classList.add('summon-skip', 'ssr-revealing'); settleGachaFocus(); initGachaCanvas(); return; }
   if (['ssr-turn', 'ssr-burst'].includes(gachaPresentation.phase)) gachaPresentation.phase = 'focus';
   else if (gachaPresentation.phase === 'flight') gachaPresentation.phase = 'grid';
@@ -876,6 +870,7 @@ function skipGachaMotion() {
 
 function closeGachaPresentation(accepted = false) {
   if (!gachaPresentation) return;
+  stopGoldSfx();   // 收下/关闭演出：金卡音效同步淡出
   persistGachaProgress(accepted); clearGachaTimers(); gachaPresentation = null; render();
 }
 
@@ -934,7 +929,7 @@ async function act(type, payload = {}, { quiet = false } = {}) {
 }
 
 function resetTransientState() {
-  clearTimeout(timer); clearGachaTimers(); gachaPresentation = null;
+  clearTimeout(timer); clearGachaTimers(); gachaPresentation = null; stopGoldSfx();
   storyReplay = null; storyDisplayBeat = null; storyArchiveOpen = false; collectionDetailId = null;
   deleteSlotId = null;
   titlePanel = null; newSaveSlotId = null; quitConfirm = false; quitState = false;
@@ -1392,7 +1387,7 @@ function settingsView() {
   const current = currentSlot();
   return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><button class="btn ghost" data-action="back-to-title">返回初始界面</button><input type="file" accept="application/json" data-import hidden></div></section>
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
-    <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 合成提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
+    <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 招募提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
     <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
     <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">懵懵懂懂间，恍然仿佛听见一声叫唤……是我吗？</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
