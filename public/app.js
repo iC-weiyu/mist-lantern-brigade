@@ -595,6 +595,42 @@ function stopHallMusic() {
   if (hallMusic) hallMusicFade(0, 1.2);
 }
 
+// 设置页「换一首」按钮旁边的状态文字。
+function hallTrackLabel() {
+  if (!bgmEnabled) return '背景音乐已关闭';
+  if (hallMusicState === 'ready' && hallMusic) {
+    const total = hallMusic.tracks.length;
+    return total > 1 ? `当前第 ${hallMusic.index + 1} 首 / 共 ${total} 首` : '当前仅一首曲目';
+  }
+  if (hallMusicState === 'missing') return '未找到曲目文件';
+  if (hallMusicState === 'probing') return '正在载入曲目……';
+  return '尚未载入曲目';
+}
+
+// 设置页的「换一首」：跳过 30 秒间隔，立刻切到下一首；音乐关着就顺手打开。
+// 正在播（或正等间隔）时前进一首；本来就停着则从头放当前这首。
+function switchHallTrack() {
+  if (!bgmEnabled) {
+    bgmEnabled = true;
+    localStorage.setItem('mist-bgm', 'on');
+    toast('已开启会馆背景音乐');
+  }
+  if (hallMusicState === 'idle') {
+    hallMusicState = 'probing';
+    probeHallMusic();                 // 载入完成后会自动开播
+    render();
+    return;
+  }
+  if (hallMusicState !== 'ready' || !hallMusic) { toast('没有找到会馆背景音乐文件', true); return; }
+  const music = hallMusic;
+  const advancing = !music.element.paused || Boolean(hallMusicGapTimer);
+  clearTimeout(hallMusicGapTimer); hallMusicGapTimer = null;
+  music.errorStreak = 0;
+  playHallTrack(music.index + (advancing ? 1 : 0));
+  render();
+  toast(`已切到第 ${music.index + 1} 首`);
+}
+
 // 一曲放完：等 30 秒再放下首（最后一首接回第一首）。
 function onHallMusicEnded() {
   const music = hallMusic;
@@ -1388,7 +1424,7 @@ function settingsView() {
   return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><button class="btn ghost" data-action="back-to-title">返回初始界面</button><input type="file" accept="application/json" data-import hidden></div></section>
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 招募提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
-    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label></section>
+    <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><div class="bgm-switch-row"><button class="btn ghost" data-action="switch-bgm" ${hallMusicState === 'missing' ? 'disabled' : ''}>换一首</button><span class="fine">${hallTrackLabel()}</span></div></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
     <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">懵懵懂懂间，恍然仿佛听见一声叫唤……是我吗？</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
 }
@@ -1963,6 +1999,7 @@ app.addEventListener('click', async (event) => {
     const wishes = [...document.querySelectorAll('[data-wish]')].map((el) => el.value); await act('set_wishes', { pool, wishes }); return;
   }
   if (action === 'pick-import') { document.querySelector('[data-import]').click(); return; }
+  if (action === 'switch-bgm') { switchHallTrack(); return; }
 });
 
 app.addEventListener('change', async (event) => {
