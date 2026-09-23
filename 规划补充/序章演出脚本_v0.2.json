@@ -18,40 +18,42 @@
   "scenes": [
     {
       "id": "opening",
-      "title": "钥匙与第一张委托",
+      "title": "初次委托",
       "trigger": "auto",
       "nextAction": "next_scene",
       "requiresScene": null,
       "beats": [
-        { "speaker": "旁白", "text": "门锁比想象中好开。真正费了点力气的，是门后那张顶住地板的旧桌子。" },
-        { "speaker": "米团", "speakerId": "L03", "text": "会长，账册和门牌都在这儿了。执照今天起算，招牌得先钉回去。" },
-        { "speaker": "米团", "speakerId": "L03", "text": "桌上的东西我分了两堆：现在有用的，和以后可能有用的。你要是想挪，我就重新分。" },
-        { "speaker": "你", "text": "……先都留着吧。" },
+        { "speaker": "旁白", "text": "门比想象中的好开。真正费了点力气的，是门后那张顶住地板的旧桌子。" },
+        { "speaker": "旁白", "text": "据上一任会长的叮嘱，下一位来到这的人就是他命定的后继者......也就是你。" },
+        { "speaker": "米团", "speakerId": "L03", "text": "会长，账册和门牌都在这儿了。执照还在路上，招牌得先钉回去。" },
+        { "speaker": "米团", "speakerId": "L03", "text": "桌上的东西我分了两堆，这一堆是以后可能派上用场的，剩下的都是过去旅人们的资料了。" },
+        { "speaker": "你", "text": "......先都留着吧。" },
         { "speaker": "米团", "speakerId": "L03", "text": "好。那我先把这一堆搬到柜台下面。" },
-        { "speaker": "旁白", "text": "门口有人敲了两下门框。来客没进店，只把一封信放在门槛上，转身走进雨里。" },
-        { "speaker": "米团", "speakerId": "L03", "text": "诊所的委托。送药队昨天午后走的旧驿道，到现在没有回信。" },
-        { "speaker": "南星", "speakerId": "L02", "text": "药箱里有退热的、止血的，还有给孩子的。少一箱都麻烦。" },
-        { "speaker": "南星", "speakerId": "L02", "text": "先说好，找到人之前别逞强。你们谁受了伤，都由我看。" },
+        { "speaker": "旁白", "text": "陈旧而又庄重的木门叩了两响。来客却没进店，只把一封信放在门槛上，回身潜进雨里。" },
+        { "speaker": "米团", "speakerId": "L03", "text": "这是......诊所的委托。送药队昨天傍晚走的旧驿道，到现在还没有回信。" },
+        { "speaker": "南星", "speakerId": "L02", "text": "药箱里有退热的、止血的，还有疗毒的。少一箱都麻烦。" },
+        { "speaker": "南星", "speakerId": "L02", "text": "先说好，找到人之前谁都别逞强。一路凶险，受了伤可不是能硬撑的。" },
         { "speaker": "你", "text": "米团，帮我看看会馆还有什么能带上。" },
-        { "speaker": "米团", "speakerId": "L03", "text": "能带上的都在这张单子上了。绳子、干粮、两盏手灯。报酬那栏我留了空，等你们回来再填。" },
-        { "speaker": "冬青", "speakerId": "L01", "text": "会馆的盾手，冬青。旧驿道我熟，先做事，报酬最后谈。" },
-        { "speaker": "冬青", "speakerId": "L01", "text": "第一趟不需要很多人。站我后面就行。" }
+        { "speaker": "米团", "speakerId": "L03", "text": "都在这张单子上了。绳子、干粮、两盏手灯和一刃小刀。报酬那栏我留了空，等回来再填吧。" },
+        { "speaker": "旁白", "text": "一个结实的身影从边门走进来，臂上束着一块圆盾，做工还挺精致。是冬青。会馆资历最老的盾手。"},
+        { "speaker": "冬青", "speakerId": "L01", "text": "旧驿道我熟。先办事，报酬最后谈。" },
+        { "speaker": "冬青", "speakerId": "L01", "text": "这趟不需要很多人。不想沾血的话，站我后面就行。" }
       ]
     },
     {
       "id": "departure",
-      "title": "会馆门前",
+      "title": "临行·会馆门前",
       "trigger": "auto",
       "nextAction": "next_scene",
       "requiresScene": "opening",
       "beats": [
-        { "speaker": "你", "text": "点齐人，出发。" },
+        { "speaker": "你", "text": "人都齐了，出发。" },
         { "speaker": "路修", "speakerId": "L04", "text": "旧驿道有两条岔路。一条绕山，一条贴着河。绕山那条，最近有人把灯摘了。" },
-        { "speaker": "小灯芯", "speakerId": "L05", "text": "手灯我检查过了。风一起就把手拢上，别让它熄。" },
-        { "speaker": "小灯芯", "speakerId": "L05", "text": "要是我点的火太大，你直接说。我改。" },
-        { "speaker": "南星", "speakerId": "L02", "text": "队伍里有人会治疗，这是好事。但别把它当成可以受伤的理由。" },
-        { "speaker": "冬青", "speakerId": "L01", "text": "出发前最后一句：护盾先给最前面的人，药先留给最晚倒下的人。" },
-        { "speaker": "旁白", "text": "五个人走出会馆的门。雨小了一点，街上的路灯还亮着，只是比昨天暗。" }
+        { "speaker": "小灯芯", "speakerId": "L05", "text": "手灯我检查过了。风一起就把手拢上，别让它熄了。" },
+        { "speaker": "小灯芯", "speakerId": "L05", "text": "要是我点的火太大，你说一嘴就行。" },
+        { "speaker": "南星", "speakerId": "L02", "text": "队伍里有人会治疗，这是好事。但这不是可以受伤的理由。" },
+        { "speaker": "冬青", "speakerId": "L01", "text": "出发前还有最后一句：护盾先给最前面的人，药留给最晚倒下的人。" },
+        { "speaker": "旁白", "text": "一行人走出会馆的门。雨小了一点，街上的路灯还亮着，只是比昨天暗。" }
       ]
     },
     {
@@ -62,42 +64,42 @@
       "nextAction": "battle",
       "requiresScene": "departure",
       "beats": [
-        { "speaker": "旁白", "text": "旧驿道的第一盏灯倒在路边，灯芯的位置空着。雾沿着路面涌过来，比城里的厚。" },
+        { "speaker": "旁白", "text": "旧驿道的第一盏灯倒在路边，眼见的没有了灯芯。浓雾沿着路面涌过来，比城里的厚。" },
         { "speaker": "路修", "speakerId": "L04", "text": "就是这里。往前的路我还能认，但雾太大，得靠手灯一盏一盏照过去。" },
-        { "speaker": "冬青", "speakerId": "L01", "text": "前面有东西。靴印不是一个方向，是围着这里绕的。" },
-        { "speaker": "南星", "speakerId": "L02", "text": "雾里有东西在呼吸。都站到我前面来，别让它们贴上来。" },
-        { "speaker": "小灯芯", "speakerId": "L05", "text": "我把灯点上！——这次只点该点的那一盏。" },
+        { "speaker": "冬青", "speakerId": "L01", "text": "不对，有情况。靴印不是一个方向，是围着这里绕的。" },
+        { "speaker": "南星", "speakerId": "L02", "text": "雾里有东西在呼吸。做好备战准备，别让它们贴上来。" },
+        { "speaker": "小灯芯", "speakerId": "L05", "text": "把灯点上！" },
         { "speaker": "你", "text": "点灯。盾手在前，其他人跟紧。" }
       ]
     },
     {
       "id": "after_bridge",
-      "title": "捡到第一张回执",
+      "title": "第一张回执",
       "trigger": "after_victory",
       "stageId": "prologue_1",
       "nextAction": "next_scene",
       "requiresScene": "before_bridge",
       "beats": [
-        { "speaker": "旁白", "text": "雾散开一小块。灯重新亮起来的时候，路面上留下的东西才看得清。" },
-        { "speaker": "路修", "speakerId": "L04", "text": "车辙到这里就断了。送药的车不是被推下坡，是被人从这里抬走的。" },
+        { "speaker": "旁白", "text": "雾散开一小块。灯重新亮起来的时候，路面上残留的印记才看得清。" },
+        { "speaker": "路修", "speakerId": "L04", "text": "车辙到这里就断了。送药的车不是被推下坡......是被人从这里抬走的。" },
         { "speaker": "南星", "speakerId": "L02", "text": "地上有药瓶的碎片。空的那瓶是退热的，说明他们还在带着人走。" },
-        { "speaker": "小灯芯", "speakerId": "L05", "text": "灯是被人取走了灯芯。不是烧完的，接口是干净的。" },
-        { "speaker": "冬青", "speakerId": "L01", "text": "记住这一点。取灯芯的人，还会再来第二盏。" }
+        { "speaker": "小灯芯", "speakerId": "L05", "text": "接口干净。灯芯不是烧完的。是被人取走的。" },
+        { "speaker": "冬青", "speakerId": "L01", "text": "记住这一点。取灯芯的人，还会再来第二次。" }
       ]
     },
     {
       "id": "before_shelter",
-      "title": "伞下的药箱",
+      "title": "药箱",
       "trigger": "auto",
       "stageId": "prologue_2",
       "nextAction": "battle",
       "requiresScene": "after_bridge",
       "beats": [
-        { "speaker": "旁白", "text": "路边的避雨棚塌了半边。有人把它当成掩体，也有人把它当成储藏间。" },
+        { "speaker": "旁白", "text": "路旁的避雨棚塌了半边。有人把它当成掩体，也有人把它当成储藏间。" },
         { "speaker": "南星", "speakerId": "L02", "text": "药箱在里面。少了一箱，剩下的都在。他们把人带走了，把药留下了。" },
         { "speaker": "冬青", "speakerId": "L01", "text": "有东西守在这儿。雾兽不会自己挑地方，是有人把它们赶到这里的。" },
-        { "speaker": "路修", "speakerId": "L04", "text": "棚子后面还有脚印，往山上去了。" },
-        { "speaker": "你", "text": "先护住药箱，别追太远。" }
+        { "speaker": "路修", "speakerId": "L04", "text": "棚子后面还有脚印，往山上去的。" },
+        { "speaker": "你", "text": "别追太远，先护住药箱吧。" }
       ]
     },
     {
@@ -108,12 +110,12 @@
       "nextAction": "next_scene",
       "requiresScene": "before_shelter",
       "beats": [
-        { "speaker": "旁白", "text": "棚子后面的雾里有人走过来。撑伞的走得很慢，像是确定我们不会动手。" },
+        { "speaker": "旁白", "text": "棚子后面的雾里，有人慢慢走过来。撑着伞，走得很慢，像是确定我们不会动手。" },
         { "speaker": "白芷", "speakerId": "N42", "text": "别追了。前面那段路，灯全被取走了灯芯。" },
         { "speaker": "引蝶", "speakerId": "N40", "text": "我们跟送药队同路。他们让我们把药箱留下，说箱子比人好带。" },
-        { "speaker": "花铃", "speakerId": "N41", "text": "三个人，全须全尾地被带走了。他们不缺钱，也不缺药，只缺一盏亮着的灯。" },
-        { "speaker": "白芷", "speakerId": "N42", "text": "取灯芯的人今晚会回到那条岔路。你们要是想把人带回来，就在雾最厚之前到。" },
-        { "speaker": "冬青", "speakerId": "L01", "text": "那就先去岔路。药箱留在这里，记号我来做。" }
+        { "speaker": "花铃", "speakerId": "N41", "text": "三个人，片影不留地被带走了。他们不缺钱，也不缺药，只缺一盏亮着的灯。" },
+        { "speaker": "白芷", "speakerId": "N42", "text": "取灯芯的人今晚会回到那条岔路。你们要是想把人带回来，最好在雾最厚之前到。" },
+        { "speaker": "冬青", "speakerId": "L01", "text": "那就先去岔路。药箱留在这里，我来做记号。" }
       ]
     },
     {
@@ -125,25 +127,25 @@
       "requiresScene": "after_shelter",
       "beats": [
         { "speaker": "旁白", "text": "岔路口的雾里立着一盏没点的灯。灯座被人加固过，旁边有绳子和抬架。" },
-        { "speaker": "白芷", "speakerId": "N42", "text": "人绑在灯座后面。他们不打算杀人，只打算让这条路黑下去。" },
-        { "speaker": "小灯芯", "speakerId": "L05", "text": "这次我要点一整排。会长，你数三个数就行。" },
+        { "speaker": "白芷", "speakerId": "N42", "text": "人就绑在灯座后面。他们不打算杀人，只打算让这条路一直黑下去。" },
+        { "speaker": "小灯芯", "speakerId": "L05", "text": "这次我要点一整排。有我在这里就不能陷入黑暗。" },
         { "speaker": "南星", "speakerId": "L02", "text": "最后一场了。谁撑不住就退到我后面，别硬扛。" },
-        { "speaker": "你", "text": "点灯，接人，一起回家。" }
+        { "speaker": "你", "text": "点灯，接人，带他们回去。" }
       ]
     },
     {
       "id": "after_return",
-      "title": "第一张回执",
+      "title": "开门",
       "trigger": "after_victory",
       "stageId": "prologue_3",
       "nextAction": "prologue_end",
       "requiresScene": "before_return",
       "beats": [
-        { "speaker": "旁白", "text": "送药队的三个人被扶下山时，天快亮了。灯座上的灯一直亮到城门口。" },
+        { "speaker": "旁白", "text": "送药队的三个人被扶下山时，天快亮了。路边的灯一直亮到城门口。" },
         { "speaker": "白芷", "speakerId": "N42", "text": "药送到诊所，回执我写。灯的事，等天亮了再谈。" },
-        { "speaker": "引蝶", "speakerId": "N40", "text": "路修好了，还是有人会来摘灯芯。记着这一点。" },
-        { "speaker": "花铃", "speakerId": "N41", "text": "我们会再来雾港的。下次来的时候，希望招牌已经钉回去了。" },
-        { "speaker": "米团", "speakerId": "L03", "text": "招牌钉回去了，会长。第一张回执我也夹进账册了。" },
+        { "speaker": "引蝶", "speakerId": "N40", "text": "路修好了，还是有人会来摘灯芯。还是得留心。" },
+        { "speaker": "花铃", "speakerId": "N41", "text": "我们会再来雾港的。下次来的时候，希望招牌已经钉好了。" },
+        { "speaker": "米团", "speakerId": "L03", "text": "会长，第一张回执我夹进账册了。" },
         { "speaker": "米团", "speakerId": "L03", "text": "报酬那栏我按诊所的报价填好了。往后的招募，可以从雾海契约走。" },
         { "speaker": "冬青", "speakerId": "L01", "text": "第一趟走完了。会馆的门，可以正式开了。" },
         { "speaker": "你", "text": "那就开门。" }
