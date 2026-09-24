@@ -1570,12 +1570,12 @@ function renderStory() {
         </label>
         <p class="fine" id="hero-name-hint">若是无名无姓，此后唤你「浪人」便是。</p>
       </div>
-      <div class="story-actions"><div><button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn primary" data-action="confirm-hero-name">报上名号 <kbd>回车</kbd></button></div></div>
+      <div class="story-actions"><div></div><div class="story-nav"><button class="btn primary" data-action="confirm-hero-name">报上名号 <kbd>回车</kbd></button></div></div>
     </section></div>`;
   }
   if (scene.id === 'opening' && beatIndex === 0 && !(storyReplay ? storyReplay.backgroundSeen : progress.backgroundSeen)) {
     const background = model.content.prologue.background;
-    if (background) return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel story-background"><div class="story-scene-head"><div><p class="eyebrow">开始之前 · 主角背景</p><h2 id="story-title">${esc(background.title)}</h2></div><span>序章</span></div><div class="story-body"><p class="story-background-subtitle">${esc(background.subtitle)}</p>${background.paragraphs.map(text => `<p class="story-background-copy">${storyText(text)}</p>`).join('')}</div><div class="story-actions"><button class="btn ghost" data-action="back-to-title">返回初始界面</button><button class="btn primary" data-action="story-background-done">开门，认识队友 <kbd>空格</kbd></button></div></section></div>`;
+    if (background) return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel story-background"><div class="story-scene-head"><div><p class="eyebrow">开始之前 · 主角背景</p><h2 id="story-title">${esc(background.title)}</h2></div><span>序章</span></div><div class="story-body"><p class="story-background-subtitle">${esc(background.subtitle)}</p>${background.paragraphs.map(text => `<p class="story-background-copy">${storyText(text)}</p>`).join('')}</div><div class="story-actions"><span></span><button class="btn primary" data-action="story-background-done">开门，认识队友 <kbd>空格</kbd></button></div></section></div>`;
   }
   const beat = scene.beats[beatIndex];
   const isLast = beatIndex === scene.beats.length - 1;
@@ -1587,7 +1587,7 @@ function renderStory() {
   return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel ${speaker ? `rarity-${speaker.rarity.toLowerCase()}` : 'story-neutral'}">
     <div class="story-scene-head"><div><p class="eyebrow">${storyReplay ? '剧情回看' : '序章 · 第一张回执'}</p><h2 id="story-title">${esc(scene.title)}</h2></div><span>${beatIndex + 1} / ${scene.beats.length}</span></div>
     <div class="story-body"><div class="story-speaker">${esc(speakerLabel)}${speaker ? `<span class="story-rarity">${speaker.rarity}</span>` : ''}</div><div class="story-copy">${storyText(beat.text)}</div><div class="story-character-slot" ${characterCard ? '' : 'aria-hidden="true"'}>${characterCard}</div></div>
-    <div class="story-actions"><div>${storyReplay ? '<button class="btn ghost" data-action="exit-story-replay">退出回看</button>' : '<button class="btn ghost" data-action="skip-story-scene">跳过本段</button>'}<button class="btn ghost" data-action="back-to-title">返回初始界面</button></div><div class="story-nav"><button class="btn ghost" data-action="previous-story-beat" ${beatIndex === 0 ? 'disabled' : ''}>上一句</button><button class="btn primary" data-action="next-story-beat">${storyReplay && isLast ? '结束回看' : isLast ? esc(scene.nextAction.label) : '继续'} <kbd>空格</kbd></button></div></div>
+    <div class="story-actions"><div>${storyReplay ? '<button class="btn ghost" data-action="exit-story-replay">退出回看</button>' : '<button class="btn ghost" data-action="skip-story-scene">跳过本段</button>'}</div><div class="story-nav"><button class="btn ghost" data-action="previous-story-beat" ${beatIndex === 0 ? 'disabled' : ''}>上一句</button><button class="btn primary" data-action="next-story-beat">${storyReplay && isLast ? '结束回看' : isLast ? esc(scene.nextAction.label) : '继续'} <kbd>空格</kbd></button></div></div>
   </section></div>`;
 }
 

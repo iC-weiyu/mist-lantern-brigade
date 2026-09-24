@@ -1087,6 +1087,10 @@ body.hall select option { background: #141b1f; color: var(--mist-100); }
 /* 会馆内的各种小面板 */
 body.hall .hero-main, body.hall .hero-side, body.hall .pool-banner { box-shadow: inset 0 0 0 1px var(--border), 0 12px 34px rgba(0, 0, 0, .30); }
 body.hall .stat, body.hall .character-step, body.hall .collection-base-stats span, body.hall .collection-total { background: rgba(255, 255, 255, .05); }
+/* 图鉴页顶部的「主角 · 独立档案」原本是写死的浅色渐变，暗色主题下会变成白底白字 */
+body.hall .collection-protagonist { background: linear-gradient(115deg, rgba(22, 29, 34, .90), rgba(14, 19, 22, .92)); }
+body.hall .tag { background: rgba(255, 255, 255, .08); }
+body.hall .party-unsaved { border-color: rgba(226, 180, 103, .42); background: rgba(226, 180, 103, .16); color: #f0d59a; }
 body.hall .character-current-stats div, body.hall .protagonist-stats > div, body.hall .equipment-stats { background: rgba(255, 255, 255, .06); }
 body.hall .collection-hero { background: radial-gradient(circle at 82% 30%, rgba(111, 192, 161, .10), transparent 31%), linear-gradient(135deg, rgba(22, 29, 34, .86), rgba(13, 18, 21, .90)); }
 body.hall .collection-total { box-shadow: inset 0 0 0 1px rgba(111, 192, 161, .26); }
@@ -1126,6 +1130,14 @@ body.hall .formation-cell.empty { border-color: rgba(255, 255, 255, .20); color:
 body.hall .formation-cell.rarity-r { border-color: #68aaa9; background: rgba(104, 170, 169, .14); color: #bfe3e0; box-shadow: inset 3px 0 #68aaa9; }
 body.hall .test-slot-card { border-color: rgba(111, 192, 161, .40); background: linear-gradient(110deg, rgba(20, 30, 29, .90), rgba(14, 20, 22, .92)); }
 body.hall .test-mode-banner { border-color: rgba(111, 192, 161, .36); background: rgba(111, 192, 161, .13); color: #a9e0cb; }
+
+/* 战斗飘字与装备增减：原本靠「深色字 + 白描边」压在浅底上，
+   暗底改成「亮色字 + 暗描边」，夜里才看得清。 */
+body.hall .battle-fx-number { color: #ffb4a0; text-shadow: 0 1px 0 rgba(0, 0, 0, .85), 0 0 6px rgba(0, 0, 0, .80), 0 0 14px rgba(0, 0, 0, .60); }
+body.hall .battle-fx-number.heal, body.hall .battle-fx-mote.heal { color: #86e6ac; }
+body.hall .battle-fx-number.shield, body.hall .battle-fx-mote.shield { color: #9cd2ff; }
+body.hall .battle-fx-number.buff, body.hall .battle-fx-mote.buff { color: #ffd57e; }
+body.hall .equipment-stat-line .down, body.hall .equipment-remove:hover, body.hall .equipment-remove:focus-visible { color: #e79595; }
 
 /* 弹层与剧情：整体压暗，避免浅色面板在夜里发亮 */
 body.hall .story-overlay, body.hall .modal-backdrop { background: rgba(4, 7, 9, .74); backdrop-filter: blur(10px); }
