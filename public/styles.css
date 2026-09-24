@@ -1028,3 +1028,119 @@ select[data-party-slot] { border:1px solid var(--quality-edge); border-left-widt
   .title-panel-head { flex-direction:column; align-items:stretch; }
 }
 @media (prefers-reduced-motion:reduce) { .title-rain i { animation:none; top:var(--y); transform:rotate(var(--tilt)); } .title-photo, .title-screen.thunder-strike .title-photo { filter:none; transition:none; } }
+
+/* ── 会馆内（body.hall）：模糊雨夜实景 + 暗色可读主题 ──
+   初始界面与退出画面不带 .hall，保持原来的浅色雨夜样式；进入存档后页面底色换成
+   模糊处理过的 public/assets/hall-bg.jpg，浅色纸面 UI 改成半透明暗面，
+   这样文字、卡片和弹层压在照片上依然清楚。 */
+html:has(body.hall) { background: #0b0f12; }
+body.hall {
+  color-scheme: dark;
+  --fog-950: #0b0f12;
+  --fog-900: #131a1e;
+  --fog-850: rgba(17, 23, 27, .84);
+  --fog-800: rgba(30, 38, 44, .82);
+  --fog-700: rgba(48, 60, 67, .88);
+  --mist-100: #eef4f1;
+  --mist-300: #cfdcd7;
+  --mist-500: #a4b6b0;
+  --mist-650: #8e9f99;
+  --lantern: #e2b467;
+  --lantern-strong: #f0c877;
+  --herb: #6fc0a1;
+  --danger: #e08b8b;
+  --focus: #7fd0b3;
+  --border: rgba(226, 240, 236, .12);
+  --border-strong: rgba(226, 240, 236, .22);
+  --shadow: 0 1px 0 rgba(0, 0, 0, .30), 0 16px 40px rgba(0, 0, 0, .34);
+  --rarity-r-ink: #a9c6c9; --rarity-r-wash: rgba(155, 180, 183, .14); --rarity-r-edge: #74908f;
+  --rarity-sr-ink: #d5b9f7; --rarity-sr-wash: rgba(177, 133, 214, .17); --rarity-sr-edge: #9c72d2;
+  --rarity-ssr-ink: #f0cd82; --rarity-ssr-wash: rgba(215, 178, 94, .17); --rarity-ssr-edge: #c49d4e;
+  background-color: #0b0f12;
+  background-image:
+    linear-gradient(180deg, rgba(7, 11, 14, .60) 0%, rgba(6, 9, 12, .76) 52%, rgba(5, 8, 10, .86) 100%),
+    url("/assets/hall-bg.jpg");
+  background-size: cover, cover;
+  background-position: center top, center 52%;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: fixed, fixed;
+}
+
+/* 顶栏、侧栏与页面级小面 */
+body.hall .sidebar { background: rgba(9, 13, 16, .82); backdrop-filter: blur(16px); box-shadow: 1px 0 0 rgba(255, 255, 255, .05); }
+body.hall .topbar { background: rgba(9, 13, 16, .86); backdrop-filter: blur(14px); box-shadow: 0 6px 22px rgba(0, 0, 0, .36); }
+body.hall .brand .seal.seal-icon { background: rgba(255, 255, 255, .08); }
+body.hall .resource { background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 1px var(--border); }
+body.hall .btn:hover { background: rgba(72, 88, 96, .92); }
+body.hall .progress { background: rgba(255, 255, 255, .14); }
+body.hall .banner { background: rgba(224, 139, 139, .13); color: #f0b3b3; }
+body.hall .readonly { background: rgba(226, 180, 103, .14); color: var(--lantern); }
+body.hall .toast { background: #101619; color: #f2f8f5; box-shadow: 0 16px 40px rgba(0, 0, 0, .50), inset 0 0 0 1px var(--border-strong); }
+
+/* 表单控件 */
+body.hall select, body.hall input[type="text"], body.hall input:not([type]), body.hall textarea,
+body.hall .workbench-resources input, body.hall .workbench-grant input, body.hall .workbench-grant select {
+  background: rgba(10, 15, 18, .76); border-color: var(--border-strong); color: var(--mist-100);
+}
+body.hall select option { background: #141b1f; color: var(--mist-100); }
+
+/* 会馆内的各种小面板 */
+body.hall .hero-main, body.hall .hero-side, body.hall .pool-banner { box-shadow: inset 0 0 0 1px var(--border), 0 12px 34px rgba(0, 0, 0, .30); }
+body.hall .stat, body.hall .character-step, body.hall .collection-base-stats span, body.hall .collection-total { background: rgba(255, 255, 255, .05); }
+body.hall .character-current-stats div, body.hall .protagonist-stats > div, body.hall .equipment-stats { background: rgba(255, 255, 255, .06); }
+body.hall .collection-hero { background: radial-gradient(circle at 82% 30%, rgba(111, 192, 161, .10), transparent 31%), linear-gradient(135deg, rgba(22, 29, 34, .86), rgba(13, 18, 21, .90)); }
+body.hall .collection-total { box-shadow: inset 0 0 0 1px rgba(111, 192, 161, .26); }
+body.hall .collection-close { background: rgba(255, 255, 255, .08); }
+body.hall .collection-current.locked { background: rgba(255, 255, 255, .05); }
+
+/* 图鉴与角色卡：稀有度底色改成暗色洗色，未获得依旧整块压暗 */
+body.hall .character-card, body.hall .pull-card, body.hall .party-member, body.hall .collection-card { background: linear-gradient(150deg, var(--quality-wash, rgba(255, 255, 255, .05)), rgba(17, 23, 27, .94) 75%); }
+body.hall .collection-card { background: linear-gradient(180deg, rgba(31, 39, 44, .92), rgba(17, 23, 27, .94)); }
+body.hall .collection-card.rarity-sr, body.hall .pull-card.rarity-sr, body.hall .character-card.rarity-sr { background: linear-gradient(150deg, rgba(156, 114, 210, .20), rgba(17, 23, 27, .94) 85%); }
+body.hall .collection-card.rarity-ssr, body.hall .pull-card.rarity-ssr, body.hall .character-card.rarity-ssr { background: linear-gradient(150deg, rgba(196, 157, 78, .22), rgba(17, 23, 27, .94) 85%); }
+body.hall .collection-monogram, body.hall .collection-detail-art > span { background: rgba(255, 255, 255, .05); }
+body.hall .collection-detail-art { background: radial-gradient(circle, rgba(155, 200, 196, .10), transparent 35%), repeating-conic-gradient(from 12deg, transparent 0 18deg, rgba(255, 255, 255, .02) 19deg 20deg); }
+body.hall .collection-card.undiscovered,
+body.hall .collection-card.undiscovered.rarity-ssr,
+body.hall .collection-card.undiscovered.rarity-sr {
+  background: linear-gradient(150deg, rgba(25, 31, 35, .93), rgba(15, 20, 23, .95) 88%);
+  border-top-color: rgba(255, 255, 255, .16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
+  filter: saturate(.30) brightness(.88);
+}
+body.hall .collection-card.undiscovered:hover { background: linear-gradient(150deg, rgba(35, 43, 48, .95), rgba(21, 27, 31, .96) 88%); filter: saturate(.42) brightness(.98); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 12px 32px rgba(0, 0, 0, .38); }
+body.hall .collection-card.undiscovered .collection-monogram { background: rgba(255, 255, 255, .05); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .10); }
+body.hall .rarity-sr .collection-detail-art { background: linear-gradient(150deg, rgba(156, 114, 210, .18), rgba(17, 23, 27, .90)); }
+body.hall .rarity-sr .collection-detail-art > span { background: rgba(156, 114, 210, .18); }
+
+/* 装备页 */
+body.hall .equipment-party-sticky { background: rgba(9, 13, 16, .88); backdrop-filter: blur(12px); box-shadow: 0 12px 30px rgba(0, 0, 0, .38); }
+body.hall .equipment-library .section-head { background: rgba(10, 15, 19, .90); backdrop-filter: blur(12px); box-shadow: 0 8px 20px rgba(0, 0, 0, .32); }
+body.hall .equipment-member { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07); }
+body.hall .equipment-member.target { box-shadow: 0 0 0 2px var(--herb), inset 0 0 0 1px rgba(255, 255, 255, .07); }
+body.hall .equipment-slot { background: rgba(255, 255, 255, .05); }
+body.hall .equipment-slot.filled { background: rgba(255, 255, 255, .09); }
+
+/* 编队、测试档与工作台 */
+body.hall .formation-cell.empty { border-color: rgba(255, 255, 255, .20); color: var(--mist-500); background: rgba(255, 255, 255, .04); }
+body.hall .formation-cell.rarity-r { border-color: #68aaa9; background: rgba(104, 170, 169, .14); color: #bfe3e0; box-shadow: inset 3px 0 #68aaa9; }
+body.hall .test-slot-card { border-color: rgba(111, 192, 161, .40); background: linear-gradient(110deg, rgba(20, 30, 29, .90), rgba(14, 20, 22, .92)); }
+body.hall .test-mode-banner { border-color: rgba(111, 192, 161, .36); background: rgba(111, 192, 161, .13); color: #a9e0cb; }
+
+/* 弹层与剧情：整体压暗，避免浅色面板在夜里发亮 */
+body.hall .story-overlay, body.hall .modal-backdrop { background: rgba(4, 7, 9, .74); backdrop-filter: blur(10px); }
+body.hall .story-panel { background: linear-gradient(180deg, rgba(19, 26, 30, .96), rgba(11, 15, 18, .97)), radial-gradient(circle at 20% 0%, rgba(111, 192, 161, .10), transparent 46%); box-shadow: 0 30px 100px rgba(0, 0, 0, .55), inset 0 0 0 1px var(--border-strong); }
+body.hall .story-panel[class*="rarity-"] { box-shadow: 0 30px 100px rgba(0, 0, 0, .55), inset 0 4px 0 var(--quality-edge), inset 0 0 0 1px var(--quality-edge); }
+body.hall .story-speaker { background: rgba(111, 192, 161, .14); }
+body.hall .story-panel[class*="rarity-"] .story-speaker { color: var(--quality-ink); background: var(--quality-wash); }
+body.hall .story-character { background: rgba(255, 255, 255, .05); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+body.hall .story-character[class*="rarity-"] { background: var(--quality-wash); box-shadow: inset 3px 0 0 var(--quality-edge); }
+body.hall .story-goal { background: rgba(255, 255, 255, .05); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+body.hall .story-archive-entry { background: rgba(255, 255, 255, .05); }
+body.hall .story-archive-entry:hover { background: rgba(255, 255, 255, .09); }
+body.hall .delete-save-dialog, body.hall .collection-detail { box-shadow: 0 30px 100px rgba(0, 0, 0, .55), inset 0 0 0 1px var(--border-strong); }
+
+/* 剧情逐字显示的光标 */
+.story-copy.typing::after { content: "▍"; margin-left: 1px; color: var(--herb); animation: story-caret 900ms steps(1, end) infinite; }
+@keyframes story-caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .story-copy.typing::after { animation: none; } }

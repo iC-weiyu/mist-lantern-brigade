@@ -52,6 +52,12 @@ let collectionDetailId = null;
 let storyDisplayBeat = null;
 let storyReplay = null;
 let storyArchiveOpen = false;
+// 剧情逐字显示：storySource 由 renderStory 每次渲染写入，storyTyping 保存当前这句的进度。
+let storySource = null;
+let storyTyping = null;
+const STORY_TYPE_MS = 26;
+let storyInstant = localStorage.getItem('mist-story-instant') === 'on'
+  || (localStorage.getItem('mist-story-instant') === null && systemReduceMotion);
 let clockOffset = 0;
 let freeRefreshing = false;
 let freeRetryAt = 0;
@@ -1424,6 +1430,7 @@ function settingsView() {
   return `<div class="grid two"><section class="card"><p class="eyebrow">本地存档</p><h3>保存、导出与恢复</h3><button class="btn ghost" data-view="slots">选择存档 · ${esc(current.name)}</button><p class="fine">进度自动保存。导出与导入只针对当前存档；导入会替换当前旅程。</p><div class="character-actions"><a class="btn ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="/api/export?slotId=${model.activeSlotId}&amp;selectionToken=${encodeURIComponent(model.selectionToken)}">导出存档</a><button class="btn ghost" data-action="pick-import">导入存档</button><button class="btn ghost" data-action="back-to-title">返回初始界面</button><input type="file" accept="application/json" data-import hidden></div></section>
     <section class="card"><p class="eyebrow">写入状态</p><h3>${model.mode === 'writer' ? '当前标签页拥有写入权' : '只读模式'}</h3><p class="fine">并行标签页只允许一个写入者。写入租约失效后，刷新即可接管。</p></section>
     <section class="card"><p class="eyebrow">招募演出</p><h3>雾海契约</h3><div class="form-row" style="margin-top:12px"><label for="gacha-mode">播放方式</label><select id="gacha-mode" data-gacha-mode><option value="full" ${gachaMode === 'full' ? 'selected' : ''}>完整飞入与揭晓</option><option value="ssr" ${gachaMode === 'ssr' ? 'selected' : ''}>保留 SSR 重点演出</option><option value="direct" ${gachaMode === 'direct' ? 'selected' : ''}>省略飞入，手动翻牌</option></select></div><label class="fine setting-check"><input type="checkbox" data-gacha-sound ${gachaSound ? 'checked' : ''}> 招募提示音</label><label class="fine setting-check"><input type="checkbox" data-gacha-reduce ${gachaReduceMotion ? 'checked' : ''}> 减少动态</label></section>
+    <section class="card"><p class="eyebrow">剧情演出</p><h3>文字显示</h3><label class="fine setting-check"><input type="checkbox" data-story-instant ${storyInstant ? 'checked' : ''}> 跳过逐字显示，直接全部显示</label><p class="fine">关掉逐字效果后，剧情正文整句立刻出现；开着时按空格或点击正文，也能立刻补全当前这句。</p></section>
     <section class="card"><p class="eyebrow">声音</p><h3>环境音与背景音乐</h3><label class="fine setting-check"><input type="checkbox" data-title-rain ${rainEnabled ? 'checked' : ''}> 初始界面环境音</label><label class="fine setting-check"><input type="checkbox" data-game-bgm ${bgmEnabled ? 'checked' : ''}> 会馆背景音乐</label><label class="fine setting-check bgm-volume-row">背景音乐音量 <input type="range" min="0" max="100" step="5" data-bgm-volume value="${bgmVolume}" aria-label="背景音乐音量"><span class="tabular">${bgmVolume}%</span></label><div class="bgm-switch-row"><button class="btn ghost" data-action="switch-bgm" ${hallMusicState === 'missing' ? 'disabled' : ''}>换一首</button><span class="fine">${hallTrackLabel()}</span></div></section>
     ${model.activeSlotId === 'test' ? '<section class="card"><h3>测试工作台</h3><p>资源与角色可以自由调整。</p><button class="btn primary" data-view="workbench">打开工作台</button></section>' : `<section class="card danger-zone"><p class="eyebrow">危险操作</p><h3>删除当前存档</h3><p class="fine">删除“${esc(current.name)}”中的角色、资源、剧情与招募记录。游戏内无法撤销，建议先导出备份。</p><button class="btn danger" data-slot-delete="${model.activeSlotId}" ${model.mode !== 'writer' ? 'disabled' : ''}>删除当前存档</button></section>`}
     <section class="card"><p class="eyebrow">主角</p><h3>名字</h3><p class="fine">懵懵懂懂间，恍然仿佛听见一声叫唤……是我吗？</p><div class="hero-name-row"><input data-hero-name-input maxlength="12" value="${esc(heroName())}" autocomplete="off" spellcheck="false" aria-label="主角名字" ${model.mode !== 'writer' ? 'disabled' : ''}><button class="btn primary" data-action="save-hero-name" ${model.mode !== 'writer' ? 'disabled' : ''}>保存名字</button></div></section></div>`;
@@ -1494,7 +1501,57 @@ function initGachaCanvas() {
   gachaRaf = requestAnimationFrame(frame);
 }
 
+/* ── 剧情逐字显示 ──
+   renderStory 每次渲染都会把当前这句原文写进 storySource；DOM 里先拿到完整文本，
+   syncStoryTyping 紧接着按已显示的长度覆盖一次，所以中途重绘也不会闪出整句。
+   标题、说话人、角色卡照旧一次显示，只有正文逐字浮现。 */
+function storyTypingMarkup(text, shown) {
+  // 先切掉结尾的星号：逐字浮现时可能正好停在 ** 标记中间，
+  // 露出半截标记会在画面上闪出裸星号。等字往前走了再一起显示。
+  const body = text.slice(0, Math.max(0, shown)).replace(/\*+$/, '');
+  const openBold = (body.match(/\*\*/g) || []).length % 2 === 1;   // 正停在加粗段内部
+  return storyText(openBold ? `${body}**` : body);                 // 补上闭合，别让标记半开
+}
+
+function paintStoryTyping(shown) {
+  const node = app.querySelector('.story-copy');
+  if (!node || !storySource) return;
+  node.innerHTML = storyTypingMarkup(storySource.text, shown);
+}
+
+function cancelStoryTyping() {
+  if (storyTyping) clearInterval(storyTyping.timer);
+  storyTyping = null;
+}
+
+// 立刻补全整句；返回是否真的打断了正在进行的逐字显示。
+function completeStoryTyping() {
+  if (!storyTyping) return false;
+  cancelStoryTyping();
+  const node = app.querySelector('.story-copy');
+  if (node && storySource) { node.innerHTML = storyText(storySource.text); node.classList.remove('typing'); }
+  return true;
+}
+
+function syncStoryTyping() {
+  const node = app.querySelector('.story-copy');
+  if (!node || !storySource) { cancelStoryTyping(); return; }
+  if (storyInstant) { cancelStoryTyping(); node.innerHTML = storyText(storySource.text); node.classList.remove('typing'); return; }
+  if (storyTyping?.key === storySource.key) { paintStoryTyping(storyTyping.shown); return; }   // 重绘后接着显示
+  cancelStoryTyping();
+  storyTyping = { key: storySource.key, shown: 0, timer: null };
+  node.classList.add('typing');
+  paintStoryTyping(0);
+  storyTyping.timer = setInterval(() => {
+    if (!storyTyping || !storySource || storyTyping.key !== storySource.key) { cancelStoryTyping(); return; }
+    storyTyping.shown += 1;
+    if (storyTyping.shown >= storySource.text.length) { completeStoryTyping(); return; }
+    paintStoryTyping(storyTyping.shown);
+  }, STORY_TYPE_MS);
+}
+
 function renderStory() {
+  storySource = null;
   if (['slots', 'title'].includes(view) || quitState) return '';
   const progress = prologueProgress();
   const scene = storyReplay ? prologueScene(storyReplay.sceneId) : progress.status === 'reading' ? prologueScene(progress.currentSceneId) : null;
@@ -1526,6 +1583,7 @@ function renderStory() {
   const speakerLabel = beat.speaker === '你' ? heroName() : beat.speaker;
   const introduced = beat.characterCard ? char(beat.characterCard.id) : null;
   const characterCard = beat.characterCard ? `<aside class="story-character ${introduced ? `rarity-${introduced.rarity.toLowerCase()}` : ''}"><span>${esc(beat.characterCard.label)}${introduced ? ` <b class="story-rarity">${introduced.rarity}</b>` : ''}</span><strong>${esc(beat.characterCard.role)}</strong><p>${esc(beat.characterCard.hint)}</p></aside>` : '';
+  storySource = { key: `${storyReplay ? 'r' : 'p'}:${scene.id}:${beatIndex}`, text: beat.text };
   return `<div class="story-overlay" role="dialog" aria-modal="true" aria-labelledby="story-title"><section class="story-panel ${speaker ? `rarity-${speaker.rarity.toLowerCase()}` : 'story-neutral'}">
     <div class="story-scene-head"><div><p class="eyebrow">${storyReplay ? '剧情回看' : '序章 · 第一张回执'}</p><h2 id="story-title">${esc(scene.title)}</h2></div><span>${beatIndex + 1} / ${scene.beats.length}</span></div>
     <div class="story-body"><div class="story-speaker">${esc(speakerLabel)}${speaker ? `<span class="story-rarity">${speaker.rarity}</span>` : ''}</div><div class="story-copy">${storyText(beat.text)}</div><div class="story-character-slot" ${characterCard ? '' : 'aria-hidden="true"'}>${characterCard}</div></div>
@@ -1712,6 +1770,8 @@ function render() {
   if (view === 'title' || quitState) {
     const modalOpen = Boolean(quitState || quitConfirm || newSaveSlotId || deleteSlotId || titlePanel === 'slots');
     document.body.classList.toggle('modal-open', modalOpen);
+    document.body.classList.remove('hall');   // 初始界面与退出画面保持原来的浅色雨夜样式
+    storySource = null; cancelStoryTyping();
     app.innerHTML = quitState ? quitView() : titleView();
     if (!quitState) syncRain(rainEnabled); else syncRain(false);
     syncBgm(false);
@@ -1724,8 +1784,10 @@ function render() {
   const content = view === 'slots' ? slotsView() : view === 'home' ? homeView() : view === 'battle' ? battleView() : view === 'recruit' ? recruitView() : view === 'roster' ? rosterView() : view === 'collection' ? collectionView() : view === 'equipment' ? equipmentView() : view === 'workbench' ? workbenchView() : settingsView();
   const modalOpen = Boolean(deleteSlotId || gachaPresentation || (view !== 'slots' && (storyReplay || prologueProgress().status === 'reading')) || storyArchiveOpen || collectionDetailId);
   document.body.classList.toggle('modal-open', modalOpen);
+  document.body.classList.add('hall');   // 会馆内：模糊雨夜实景 + 暗色可读主题
   app.innerHTML = `<div class="app-shell" ${modalOpen ? 'inert aria-hidden="true"' : ''}>${nav()}<div class="main">${topbar()}<main class="page">${model.mode === 'readonly' ? '<div class="banner readonly">另一个标签页正在写入；本页暂为只读。关闭旧页并等待约 20 秒后刷新可接管。</div>' : ''}${model.activeSlotId === 'test' ? '<div class="banner test-mode-banner">测试存档 · 独立保存，可在测试工作台编辑资源与领取角色</div>' : ''}${['home', 'slots', 'workbench', 'battle'].includes(view) ? '' : storyGoalBanner()}${content}</main></div></div>${renderStory()}${renderStoryArchive()}${renderGachaOverlay()}${renderCollectionDetail()}${renderDeleteSaveDialog()}`;
   initGachaCanvas();
+  syncStoryTyping();
   scheduleBattle();
   focusHeroNameInput();
 }
@@ -1866,6 +1928,8 @@ app.addEventListener('drop', async (event) => {
 app.addEventListener('dragend', clearEquipmentInteraction);
 
 app.addEventListener('click', async (event) => {
+  // 逐字显示中：点正文先把这一句补全，再点才继续下一句。
+  if (storyTyping && event.target.closest('.story-body')) { completeStoryTyping(); return; }
   if (gachaPresentation?.phase === 'grid' && event.target.closest('.gacha-overlay') && !event.target.closest('button, a, .common-reveal-ghost')) { revealCommonGachaCards(); return; }
   const equipmentTarget = event.target.closest('[data-equipment-item], [data-equipment-slot], [data-equipment-remove], [data-equipment-target]');
   if (equipmentTarget) {
@@ -1967,8 +2031,9 @@ app.addEventListener('click', async (event) => {
     if (result) toast(`已领取 ${result.name} ×${result.count}，${result.isNew ? '角色已解锁，其余作为凭证' : '已加入重复凭证'}`); return;
   }
   if (action === 'resume-story') { storyDisplayBeat = null; render(); return; }
-  if (action === 'next-story-beat') { await nextStoryBeat(); return; }
+  if (action === 'next-story-beat') { if (completeStoryTyping()) return; await nextStoryBeat(); return; }
   if (action === 'previous-story-beat') {
+    cancelStoryTyping();
     if (storyReplay) storyReplay.beatIndex = Math.max(0, storyReplay.beatIndex - 1);
     else storyDisplayBeat = Math.max(0, (storyDisplayBeat ?? prologueProgress().beatIndex) - 1);
     render(); return;
@@ -2029,6 +2094,7 @@ app.addEventListener('change', async (event) => {
   if (event.target.matches('[data-gacha-mode]')) { gachaMode = event.target.value; localStorage.setItem('mist-gacha-mode', gachaMode); render(); return; }
   if (event.target.matches('[data-gacha-sound]')) { gachaSound = event.target.checked; localStorage.setItem('mist-gacha-sound', gachaSound ? 'on' : 'off'); if (gachaSound) ensureAudio(); return; }
   if (event.target.matches('[data-gacha-reduce]')) { gachaReduceMotion = event.target.checked; localStorage.setItem('mist-gacha-reduce', String(gachaReduceMotion)); render(); return; }
+  if (event.target.matches('[data-story-instant]')) { storyInstant = event.target.checked; localStorage.setItem('mist-story-instant', storyInstant ? 'on' : 'off'); if (storyInstant) completeStoryTyping(); render(); return; }
   if (event.target.matches('[data-title-rain]')) { rainEnabled = event.target.checked; localStorage.setItem('mist-rain', rainEnabled ? 'on' : 'off'); if (view === 'title') syncRain(true); else syncRain(false); return; }
   if (event.target.matches('[data-game-bgm]')) { bgmEnabled = event.target.checked; localStorage.setItem('mist-bgm', bgmEnabled ? 'on' : 'off'); syncBgm(view !== 'title'); render(); return; }
   if (event.target.matches('[data-bgm-volume]')) {
@@ -2061,7 +2127,7 @@ document.addEventListener('keydown', (event) => {
   const editing = event.target.matches('input, select, textarea, [contenteditable="true"]');
   if (space && event.repeat && !editing) { event.preventDefault(); return; }
   if (space && !editing && !deleteSlotId) {
-    if (!['slots', 'title'].includes(view) && !quitState && (storyReplay || prologueProgress().status === 'reading')) { event.preventDefault(); nextStoryBeat(); return; }
+    if (!['slots', 'title'].includes(view) && !quitState && (storyReplay || prologueProgress().status === 'reading')) { event.preventDefault(); if (completeStoryTyping()) return; nextStoryBeat(); return; }
     if (gachaPresentation) {
       event.preventDefault();
       if (gachaPresentation.phase === 'flight') skipGachaMotion();
