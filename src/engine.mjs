@@ -267,7 +267,7 @@ function createRepeatSession(save, stage, now = Date.now()) {
 export function enableRepeatSession(save, now = Date.now()) {
   const battle = save.battle;
   if (!battle || !['active', 'paused'].includes(battle.status)) throw new Error('请先进入一场可继续的战斗');
-  if (!save.story.clearedStages.includes(battle.stageId)) throw new Error('首次挑战最高支持 3×，请先完成本关首胜');
+  if (!save.story.clearedStages.includes(battle.stageId)) throw new Error('首次挑战最高支持 2×，请先完成本关首胜');
   ensureRepeatState(save);
   if (save.repeatSession && !['completed', 'failed', 'stopped'].includes(save.repeatSession.status)) throw new Error('已有刷关会话正在进行');
   const stage = TUTORIAL_STAGES.find((item) => item.id === battle.stageId);
@@ -552,7 +552,7 @@ export function startBattle(save, content, stageId, { repeat = false, repeatSess
   if (save.party.length !== 5) throw new Error('队伍必须有五名角色');
   let session = null;
   if (repeat) {
-    if (!save.story.clearedStages.includes(stageId)) throw new Error('首次挑战最高支持 3×，请先完成本关首胜');
+    if (!save.story.clearedStages.includes(stageId)) throw new Error('首次挑战最高支持 2×，请先完成本关首胜');
     session = repeatSessionId && save.repeatSession?.id === repeatSessionId ? save.repeatSession : createRepeatSession(save, stage, now);
     if (session.stageId !== stageId || !['active', 'stopping'].includes(session.status)) throw new Error('刷关会话与当前关卡不一致');
     session.status = 'active'; session.pauseReason = null; session.lastActiveAt = now; session.updatedAt = new Date(now).toISOString();

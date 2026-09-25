@@ -126,7 +126,7 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none; }
 .party-member strong { display: block; font-size: 13px; }
 .party-member small { color: var(--mist-500); font-size: 11px; }
 
-.battle-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+.battle-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 16px; }
 .battlefield { min-width: 0; padding: 20px; border-radius: var(--r-lg); background: var(--fog-850); box-shadow: var(--shadow); }
 .battle-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .battle-head h2 { margin: 0; font: 600 20px/1.2 Georgia, "Noto Serif SC", serif; }
@@ -598,8 +598,7 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
   .brand { padding-inline: 10px; justify-content: center; }
   .brand > div:not(.seal), .nav-link span:not(.nav-icon), .sidebar-bottom { display: none; }
   .nav-link { justify-content: center; padding: 0; }
-  .hero, .battle-layout, .pool-banner { grid-template-columns: 1fr; }
-  .battle-side { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hero, .pool-banner { grid-template-columns: 1fr; }
   .battle-side .card + .card { margin-top: 0; }
   .units { overflow-x: auto; grid-template-columns: repeat(5, 126px); padding-bottom: 4px; }
   .units.enemies { max-width: none; grid-template-columns: repeat(3, 140px); justify-content: center; }
@@ -1156,3 +1155,42 @@ body.hall .delete-save-dialog, body.hall .collection-detail { box-shadow: 0 30px
 .story-copy.typing::after { content: "▍"; margin-left: 1px; color: var(--herb); animation: story-caret 900ms steps(1, end) infinite; }
 @keyframes story-caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .story-copy.typing::after { animation: none; } }
+
+/* ── 冒险（战斗）页：左战场 + 右动作记录，整屏不用上下滚动 ──
+   原先窗口窄到 980px 以下时整块会压成单列，动作记录掉到战场下面，于是必须上下滚。
+   现在把这一页固定成「顶栏 + 满屏两列」：战场在左（内容再多也只让它自己滚），
+   策略与动作记录在右，记录框撑满剩余高度。极窄窗口（≤720px）才退回单列自然高度。 */
+body:has(.battle-layout) .main { height: 100dvh; display: flex; flex-direction: column; }
+body:has(.battle-layout) .page { flex: 1 1 auto; min-height: 0; padding: 14px 18px; display: flex; flex-direction: column; overflow: hidden; }
+body:has(.battle-layout) .battle-layout { flex: 1 1 auto; min-height: 0; align-items: stretch; gap: 12px; }
+body:has(.battle-layout) .battlefield { min-height: 0; overflow: auto; padding: 14px 16px; }
+body:has(.battle-layout) .battle-head { margin-bottom: 12px; }
+body:has(.battle-layout) .units.enemies { margin-bottom: 12px; }
+body:has(.battle-layout) .battle-rail { margin: 10px 0 12px; padding-top: 9px; }
+body:has(.battle-layout) .battle-cover-note { margin: 6px 0 10px; padding: 7px 9px; font-size: 11px; line-height: 1.55; }
+body:has(.battle-layout) .battle-formation-label { margin: 6px 0 4px; }
+body:has(.battle-layout) .battlefield .unit { min-height: 86px; padding: 8px 10px; }
+body:has(.battle-layout) .battle-hero-placeholder,
+body:has(.battle-layout) .battle-empty-cell { min-height: 86px; }
+body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 10px; }
+/* 窗口刚好卡在两列临界宽度时，五张卡不再顶出战场：优先压缩卡宽，实在放不下才让这一行横向滚 */
+body:has(.battle-layout) .units:not(.enemies) { grid-template-columns: repeat(5, minmax(84px, 1fr)); overflow-x: auto; padding-bottom: 2px; }
+body:has(.battle-layout) .battle-side { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+body:has(.battle-layout) .battle-side .card { min-height: 0; padding: 13px 14px; }
+body:has(.battle-layout) .battle-side .card + .card { margin-top: 0; }
+body:has(.battle-layout) .battle-side .card:last-child { flex: 1 1 auto; display: flex; flex-direction: column; }
+body:has(.battle-layout) .log { flex: 1 1 auto; height: auto; min-height: 88px; overflow: auto; }
+body:has(.battle-layout) .log li { padding: 6px 0; font-size: 12px; line-height: 1.5; }
+
+@media (max-height: 800px) {
+  body:has(.battle-layout) .battlefield .unit,
+  body:has(.battle-layout) .battle-hero-placeholder,
+  body:has(.battle-layout) .battle-empty-cell { min-height: 74px; }
+  body:has(.battle-layout) .battle-head { margin-bottom: 8px; }
+}
+@media (max-width: 720px) {
+  body:has(.battle-layout) .main { height: auto; }
+  body:has(.battle-layout) .page { overflow: visible; }
+  body:has(.battle-layout) .battle-layout { grid-template-columns: minmax(0, 1fr); }
+  body:has(.battle-layout) .log { height: 240px; }
+}

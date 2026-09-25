@@ -10,7 +10,7 @@ let model = null;
 let view = 'home';
 let pool = 'beginner';
 let speed = Number(sessionStorage.getItem('mist-speed') || 1);
-if (![1, 2, 3, 5].includes(speed)) speed = 1;
+if (![1, 2, 5].includes(speed)) speed = 1;
 let focusId = null;
 let strategy = 'balanced';
 let storyPage = 0;
@@ -986,8 +986,8 @@ function clearFormationDraft() { cancelFormationDrag(); partyDraft = null; forma
 function formationView() {
   const rows = [ ['前排', '生命、防御 +15%'], ['中排', '攻击 +10%'], ['后排', '治疗、护盾效果 +15%'] ];
   return `<div class="formation-editor"><div class="formation-caption"><strong>九宫阵型</strong><span>↑ 敌方方向</span></div><p class="fine">拖动调整位置，落到已有角色的格子会互换。保存编队后，下一场战斗生效。</p>${rows.map(([name, bonus], row) => `<div class="formation-row"><div class="formation-row-label"><strong>${name}</strong><span>${bonus}</span></div><div class="formation-cells">${formationDraft.slice(row * 3, row * 3 + 3).map((id, column) => {
-    const index = row * 3 + column; const hero = id === 'protagonist'; const character = hero ? { name: heroName(), rarity: 'SR', role: '独立占位 · 暂不出手' } : id ? char(id) : null;
-    return `<button type="button" class="formation-cell ${character ? `rarity-${character.rarity.toLowerCase()}` : 'empty'} ${formationSelection === index ? 'picked' : ''}" data-form-cell="${index}" aria-pressed="${formationSelection === index}" aria-label="${name}${column + 1}格，${character ? `${esc(character.name)}，${character.rarity}${hero ? '起步' : ''}` : '空位'}"><small>${name} ${column + 1}${character ? ` · ${character.rarity}${hero ? '起步' : ''}` : ''}</small><strong>${character ? esc(character.name) : '空位'}</strong><span>${character ? esc(character.role) : '可拖入角色'}</span></button>`;
+    const index = row * 3 + column; const hero = id === 'protagonist'; const character = hero ? { name: heroName(), rarity: 'SR', role: '' } : id ? char(id) : null;
+    return `<button type="button" class="formation-cell ${character ? `rarity-${character.rarity.toLowerCase()}` : 'empty'} ${formationSelection === index ? 'picked' : ''}" data-form-cell="${index}" aria-pressed="${formationSelection === index}" aria-label="${name}${column + 1}格，${character ? `${esc(character.name)}，${character.rarity}${hero ? '起步' : ''}` : '空位'}"><small>${name} ${column + 1}${character ? ` · ${character.rarity}${hero ? '起步' : ''}` : ''}</small><strong>${character ? esc(character.name) : '空位'}</strong>${hero ? '' : `<span>${character ? esc(character.role) : '可拖入角色'}</span>`}</button>`;
   }).join('')}</div></div>`).join('')}<p class="formation-feedback" aria-live="polite">${formationSelection === null ? `${esc(heroName())}与五名伙伴自由站位，同一排三个格子的加成相同。` : '已选中角色：点选目标格，或按 Tab 移动后按回车落位。'}</p></div>`;
 }
 
@@ -1163,15 +1163,15 @@ function battleView() {
       const storyLocked = requiredScene && !['legacy', 'completed'].includes(progress.status) && !progress.completedScenes?.includes(requiredScene);
       const locked = Boolean(previous && !model.save.story.clearedStages.includes(previous.id)) || storyLocked;
       const lockedLabel = storyLocked ? '先继续序章剧情' : '完成前一地点后开放';
-    return `<article class="card"><span class="tag ${model.save.story.clearedStages.includes(s.id) ? 'green' : ''}">${model.save.story.clearedStages.includes(s.id) ? '已首胜 · 可 5×' : '未首胜 · 最高 3×'}</span><h3 style="margin-top:14px">${esc(s.name)}</h3><p class="meta">敌方 ${s.enemyNames.length} 人 · 首胜招募券 ${s.ticketReward}</p><div class="character-actions"><button class="btn primary small" data-start-stage="${s.id}" ${locked ? 'disabled' : ''}>${locked ? lockedLabel : '开始战斗'}</button></div></article>`;
+    return `<article class="card"><span class="tag ${model.save.story.clearedStages.includes(s.id) ? 'green' : ''}">${model.save.story.clearedStages.includes(s.id) ? '已首胜 · 可 5×' : '未首胜 · 最高 2×'}</span><h3 style="margin-top:14px">${esc(s.name)}</h3><p class="meta">敌方 ${s.enemyNames.length} 人 · 首胜招募券 ${s.ticketReward}</p><div class="character-actions"><button class="btn primary small" data-start-stage="${s.id}" ${locked ? 'disabled' : ''}>${locked ? lockedLabel : '开始战斗'}</button></div></article>`;
     }).join('')}</div>`;
   }
   focusId ||= b.focusId; strategy = b.strategy || strategy;
   const ended = ['victory', 'defeat', 'stopped'].includes(b.status);
   return `<div class="battle-layout"><section class="battlefield"><div class="battle-head"><div><p class="eyebrow">${esc(b.stageName)}</p><h2>${b.status === 'victory' ? '战斗胜利' : b.status === 'defeat' ? '战斗失败' : b.status === 'stopped' ? '刷关已停止' : b.status === 'paused' ? '战斗已暂停' : '行动条正在推进'}</h2></div><div class="battle-controls">
-    ${[1,2,3].map((x) => `<button class="btn small ${speed === x ? 'selected' : 'ghost'}" data-speed="${x}">${x}×</button>`).join('')}<button class="btn small ${speed === 5 ? 'selected' : 'ghost'}" data-speed="5" ${!model.save.story.clearedStages.includes(b.stageId) ? 'disabled title="完成本关首胜后开放 5×"' : ''}>5×${!model.save.story.clearedStages.includes(b.stageId) ? ' · 首胜后开放' : ''}</button>
+    ${[1,2].map((x) => `<button class="btn small ${speed === x ? 'selected' : 'ghost'}" data-speed="${x}">${x}×</button>`).join('')}<button class="btn small ${speed === 5 ? 'selected' : 'ghost'}" data-speed="5" ${!model.save.story.clearedStages.includes(b.stageId) ? 'disabled title="完成本关首胜后开放 5×"' : ''}>5×${!model.save.story.clearedStages.includes(b.stageId) ? ' · 首胜后开放' : ''}</button>
     ${!ended ? `<button class="btn small ghost" data-action="${b.status === 'paused' ? 'resume-battle' : 'pause-battle'}">${b.status === 'paused' ? '继续推进' : '立即暂停'}</button>${model.save.repeatSession?.id === b.repeatSessionId && b.status === 'active' ? `<button class="btn small ghost" data-action="battle-stop-after" ${b.stopAfterBattle ? 'disabled' : ''}>${b.stopAfterBattle ? '本场结束后汇总中' : '打完本场并汇总'}</button>` : ''}` : ''}</div></div>
-    <div class="units enemies">${b.enemies.map((u) => unitCard(u, u.id === focusId)).join('')}</div><div class="battle-rail">五盏雾灯依速度蓄满；点击敌人可改变下一次自由选敌技能的集火</div>${battleFormationView(b)}
+    <div class="units enemies">${b.enemies.map((u) => unitCard(u, u.id === focusId)).join('')}</div><div class="battle-rail">点击敌人可改变下一次自由选敌技能的集火</div>${battleFormationView(b)}
     ${ended ? `<div class="hero-actions">${b.status === 'victory' && canReadNextStoryScene() ? `<button class="btn primary" data-story-begin="${prologueProgress().nextSceneId}">继续序章</button>` : '<button class="btn primary" data-action="leave-battle">查看本轮收获 / 返回关卡</button>'}<button class="btn ghost" data-start-stage="${b.stageId}">再次挑战</button>${b.status === 'victory' && b.reward ? `<span class="tag gold">${b.reward.first ? `首胜 +${b.reward.tickets} 券 · ` : ''}+${b.reward.coins} 金币 · 装备已入库</span>` : ''}${b.status === 'stopped' ? `<span class="tag danger">已停止：${esc(b.stopReason || '未完成')}</span>` : ''}</div>${b.repeatSessionId ? repeatLedgerView(model.save.repeatSession, '本次刷关') : ''}</section>` : ''}
     <aside class="battle-side"><article class="card"><h3>战斗策略</h3><div class="form-row" style="margin-top:12px"><label for="strategy">下一次行动决策生效</label><select id="strategy" data-strategy><option value="balanced" ${strategy === 'balanced' ? 'selected' : ''}>均衡：按职责使用技能</option><option value="offense" ${strategy === 'offense' ? 'selected' : ''}>强攻：辅助倾向普攻</option><option value="survive" ${strategy === 'survive' ? 'selected' : ''}>保守：治疗与护盾优先</option></select></div>
       <label class="fine" style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" data-auto-repeat ${autoRepeat ? 'checked' : ''} ${!model.save.unlocks.autoRepeat ? 'disabled' : ''}> 在线自动连战${model.save.unlocks.autoRepeat ? '' : '（序章后开放）'}</label>${model.save.repeatSession?.id === b.repeatSessionId && model.save.repeatSession.pauseReason ? `<p class="banner repeat-paused">${esc(model.save.repeatSession.pauseReason)}；不会补算离线时间，请选择继续或查看。</p>` : ''}<p class="fine">本场已进行 ${b.actionCount} 次行动</p></article>
@@ -1189,7 +1189,7 @@ function battleFormationView(battle) {
   if (!battle.formation) return `<div class="units">${battle.players.map(unit => unitCard(unit)).join('')}</div>`;
   const coverNote = battle.positioning?.version ? '<p class="fine battle-cover-note">前排掩护：敌方普通单体直伤按前/中/后排 60%/25%/15% 选行；前排存活时中排×0.85、后排×0.70，前排倒下后恢复×1.00。全体与穿透/刺杀类标记不适用。</p>' : '';
   return `<div class="battle-formation"><p class="fine">我方阵型 · 前排朝向敌方 · 站位加成已计入本场属性</p>${coverNote}${['前排','中排','后排'].map((name, row) => `<div class="battle-formation-label">${name}</div><div class="battle-formation-row">${battle.formation.slice(row * 3, row * 3 + 3).map(id => {
-    if (id === 'protagonist') return `<article class="battle-hero-placeholder"><strong>${esc(heroName())}</strong><span>独立占位 · 暂不出手</span></article>`;
+    if (id === 'protagonist') return `<article class="battle-hero-placeholder"><strong>${esc(heroName())}</strong></article>`;
     const unit = battle.players.find(candidate => candidate.characterId === id);
     return unit ? unitCard(unit) : '<div class="battle-empty-cell" aria-label="空位"></div>';
   }).join('')}</div>`).join('')}</div>`;
@@ -1986,7 +1986,7 @@ app.addEventListener('click', async (event) => {
   }
   if (target.matches('[data-pool]')) { pool = target.dataset.pool; render(); return; }
   if (target.matches('[data-equipment-slot-filter]')) { equipmentSlotFilter = target.dataset.equipmentSlotFilter; render(); return; }
-  if (target.matches('[data-speed]')) { const nextSpeed = Number(target.dataset.speed); if (nextSpeed === 5 && !model.save.story.clearedStages.includes(model.save.battle?.stageId)) return toast('完成本关首胜后才开放 5×', true); if (![1, 2, 3, 5].includes(nextSpeed)) return; speed = nextSpeed; sessionStorage.setItem('mist-speed', speed); render(); return; }
+  if (target.matches('[data-speed]')) { const nextSpeed = Number(target.dataset.speed); if (nextSpeed === 5 && !model.save.story.clearedStages.includes(model.save.battle?.stageId)) return toast('完成本关首胜后才开放 5×', true); if (![1, 2, 5].includes(nextSpeed)) return; speed = nextSpeed; sessionStorage.setItem('mist-speed', speed); render(); return; }
   if (target.matches('[data-focus]')) { focusId = target.dataset.focus; await act('battle_focus', { focusId }, { quiet: true }); return; }
   if (target.matches('[data-start-stage]')) {
     if (model.save.battle?.status === 'active' && target.dataset.startStage === model.save.battle.stageId) { view = 'battle'; render(); return; }
