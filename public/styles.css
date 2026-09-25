@@ -1156,39 +1156,73 @@ body.hall .delete-save-dialog, body.hall .collection-detail { box-shadow: 0 30px
 @keyframes story-caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .story-copy.typing::after { animation: none; } }
 
-/* ── 冒险（战斗）页：左战场 + 右动作记录，整屏不用上下滚动 ──
-   原先窗口窄到 980px 以下时整块会压成单列，动作记录掉到战场下面，于是必须上下滚。
-   现在把这一页固定成「顶栏 + 满屏两列」：战场在左（内容再多也只让它自己滚），
-   策略与动作记录在右，记录框撑满剩余高度。极窄窗口（≤720px）才退回单列自然高度。 */
+/* ── 冒险（战斗）页：动作记录贴在画面最右侧，整屏不用上下滚动 ──
+   战斗页不再居中限宽，战场铺满左侧剩余宽度，动作记录列一路顶到窗口右缘、占满整屏高度，
+   记录框内部自己滚动。战场按笔记本常见高度压缩过，1366×768 也能一屏看完；
+   只有窗口窄到 760px 以下才退回单列自然高度。 */
 body:has(.battle-layout) .main { height: 100dvh; display: flex; flex-direction: column; }
-body:has(.battle-layout) .page { flex: 1 1 auto; min-height: 0; padding: 14px 18px; display: flex; flex-direction: column; overflow: hidden; }
-body:has(.battle-layout) .battle-layout { flex: 1 1 auto; min-height: 0; align-items: stretch; gap: 12px; }
-body:has(.battle-layout) .battlefield { min-height: 0; overflow: auto; padding: 14px 16px; }
-body:has(.battle-layout) .battle-head { margin-bottom: 12px; }
-body:has(.battle-layout) .units.enemies { margin-bottom: 12px; }
-body:has(.battle-layout) .battle-rail { margin: 10px 0 12px; padding-top: 9px; }
-body:has(.battle-layout) .battle-cover-note { margin: 6px 0 10px; padding: 7px 9px; font-size: 11px; line-height: 1.55; }
-body:has(.battle-layout) .battle-formation-label { margin: 6px 0 4px; }
-body:has(.battle-layout) .battlefield .unit { min-height: 86px; padding: 8px 10px; }
+body:has(.battle-layout) .topbar { min-height: 60px; padding: 8px 20px; }
+body:has(.battle-layout) .page {
+  flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; margin: 0;
+  padding: 10px 14px 10px 18px; display: flex; flex-direction: column; overflow: hidden;
+}
+body:has(.battle-layout) .battle-layout {
+  flex: 1 1 auto; min-height: 0; align-items: stretch; gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 330px);
+}
+body:has(.battle-layout) .battlefield { min-height: 0; overflow: auto; padding: 12px 14px; }
+body:has(.battle-layout) .battle-head { margin-bottom: 8px; }
+body:has(.battle-layout) .battle-head h2 { font-size: 18px; }
+body:has(.battle-layout) .units.enemies { margin-bottom: 8px; }
+body:has(.battle-layout) .battle-rail { margin: 8px 0; padding-top: 7px; font-size: 10.5px; }
+body:has(.battle-layout) .battle-cover-note { margin: 5px 0 8px; padding: 6px 9px; font-size: 10.5px; line-height: 1.5; }
+body:has(.battle-layout) .battle-formation-label { margin: 5px 0 3px; font-size: 11px; }
+body:has(.battle-layout) .battle-formation-row { gap: 6px; }
+body:has(.battle-layout) .battlefield .unit { min-height: 78px; padding: 7px 9px; }
 body:has(.battle-layout) .battle-hero-placeholder,
-body:has(.battle-layout) .battle-empty-cell { min-height: 86px; }
-body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 10px; }
+body:has(.battle-layout) .battle-empty-cell { min-height: 78px; }
+body:has(.battle-layout) .battlefield .unit .bar { margin-top: 4px; }
+body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 8px; }
 /* 窗口刚好卡在两列临界宽度时，五张卡不再顶出战场：优先压缩卡宽，实在放不下才让这一行横向滚 */
 body:has(.battle-layout) .units:not(.enemies) { grid-template-columns: repeat(5, minmax(84px, 1fr)); overflow-x: auto; padding-bottom: 2px; }
 body:has(.battle-layout) .battle-side { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-body:has(.battle-layout) .battle-side .card { min-height: 0; padding: 13px 14px; }
+body:has(.battle-layout) .battle-side .card { min-height: 0; padding: 12px 14px; }
 body:has(.battle-layout) .battle-side .card + .card { margin-top: 0; }
-body:has(.battle-layout) .battle-side .card:last-child { flex: 1 1 auto; display: flex; flex-direction: column; }
-body:has(.battle-layout) .log { flex: 1 1 auto; height: auto; min-height: 88px; overflow: auto; }
-body:has(.battle-layout) .log li { padding: 6px 0; font-size: 12px; line-height: 1.5; }
+/* 右栏整列都是动作记录：策略与自动连战挪进战场顶部的一条 */
+body:has(.battle-layout) .battle-log-card { flex: 1 1 auto; display: flex; flex-direction: column; }
+body:has(.battle-layout) .log { flex: 1 1 auto; height: auto; min-height: 80px; overflow: auto; }
+body:has(.battle-layout) .log li { padding: 5px 0; font-size: 11.5px; line-height: 1.45; }
+.battle-strategy-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.battle-strategy-strip label { margin: 0; }
+.battle-strategy-strip select { width: auto; min-width: 190px; min-height: 34px; }
+.battle-strategy-strip .strip-check { display: flex; align-items: center; gap: 6px; }
+.battle-strategy-strip > span.fine { margin-left: auto; }
 
-@media (max-height: 800px) {
-  body:has(.battle-layout) .battlefield .unit,
-  body:has(.battle-layout) .battle-hero-placeholder,
-  body:has(.battle-layout) .battle-empty-cell { min-height: 74px; }
-  body:has(.battle-layout) .battle-head { margin-bottom: 8px; }
+/* 矮屏（1080p 以下、含 1366×768）压一档：
+   单位卡的高度是被内容撑开的，min-height 压不动，所以这里直接把卡内字号与行距收紧，
+   四行卡片（敌人一行 + 我方三排）各让出二十来像素，后排就能留在首屏里。 */
+@media (max-height: 860px) {
+  body:has(.battle-layout) .battlefield .unit { padding: 6px 8px; }
+  body:has(.battle-layout) .unit h3 { font-size: 12px; }
+  body:has(.battle-layout) .unit .role { font-size: 9px; margin-top: 2px; }
+  body:has(.battle-layout) .unit .energy { font-size: 9px; }
+  body:has(.battle-layout) .unit .unit-numbers { font-size: 9px; line-height: 1.2; margin-top: 1px; }
+  body:has(.battle-layout) .battlefield .unit .bar { margin-top: 3px; }
+  body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 5px; }
+  body:has(.battle-layout) .battlefield .unit .bar.hp { height: 6px; }
+  body:has(.battle-layout) .battle-head h2 { font-size: 16px; }
+  body:has(.battle-layout) .battle-head { margin-bottom: 6px; }
+  body:has(.battle-layout) .battle-rail { margin: 5px 0 6px; padding-top: 5px; }
+  body:has(.battle-layout) .battle-cover-note { font-size: 10px; line-height: 1.45; margin: 4px 0 6px; padding: 5px 8px; }
+  body:has(.battle-layout) .battle-formation-label { margin: 4px 0 2px; }
+  body:has(.battle-layout) .battle-formation > p.fine:first-child { font-size: 11px; margin: 0 0 2px; }
 }
-@media (max-width: 720px) {
+/* 720p 左右的笔记本再紧一档：掩护说明收到一行 */
+@media (max-height: 720px) {
+  body:has(.battle-layout) .battle-cover-note { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  body:has(.battle-layout) .battlefield .unit .role { display: none; }
+}
+@media (max-width: 760px) {
   body:has(.battle-layout) .main { height: auto; }
   body:has(.battle-layout) .page { overflow: visible; }
   body:has(.battle-layout) .battle-layout { grid-template-columns: minmax(0, 1fr); }

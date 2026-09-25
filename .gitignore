@@ -19,3 +19,5 @@ log.md
 tools/qa-formation-fixture.mjs
 tools/batch-b-balance-report.mjs
 **/save*.json
+# 本地布局检查页：用无头浏览器渲染战斗页量尺寸用，不进版本库也不进发布包
+public/__layout-check.html
