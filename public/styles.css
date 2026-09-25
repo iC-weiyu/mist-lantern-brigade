@@ -1156,21 +1156,18 @@ body.hall .delete-save-dialog, body.hall .collection-detail { box-shadow: 0 30px
 @keyframes story-caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .story-copy.typing::after { animation: none; } }
 
-/* ── 冒险（战斗）页：动作记录贴在画面最右侧，整屏不用上下滚动 ──
-   战斗页不再居中限宽，战场铺满左侧剩余宽度，动作记录列一路顶到窗口右缘、占满整屏高度，
-   记录框内部自己滚动。战场按笔记本常见高度压缩过，1366×768 也能一屏看完；
-   只有窗口窄到 760px 以下才退回单列自然高度。 */
-body:has(.battle-layout) .main { height: 100dvh; display: flex; flex-direction: column; }
+/* ── 冒险（战斗）页：整屏纵向切三块 —— 最左导航栏 | 中间战斗区 | 最右动作记录 ──
+   动作记录挂在 .app-shell 的第三列（不在战斗区里面），所以它从画面顶端一直通到底部，
+   顶栏只横跨中间的战斗区。记录框自己内部滚动；战场内容多时也只让它自己滚。 */
+.app-shell.battle-shell { grid-template-columns: 232px minmax(0, 1fr) minmax(300px, 380px); height: 100dvh; }
+body:has(.battle-layout) .main { height: 100dvh; min-width: 0; display: flex; flex-direction: column; }
 body:has(.battle-layout) .topbar { min-height: 60px; padding: 8px 20px; }
 body:has(.battle-layout) .page {
   flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; margin: 0;
-  padding: 10px 14px 10px 18px; display: flex; flex-direction: column; overflow: hidden;
+  padding: 10px 12px 10px 16px; display: flex; flex-direction: column; overflow: hidden;
 }
-body:has(.battle-layout) .battle-layout {
-  flex: 1 1 auto; min-height: 0; align-items: stretch; gap: 10px;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 330px);
-}
-body:has(.battle-layout) .battlefield { min-height: 0; overflow: auto; padding: 12px 14px; }
+body:has(.battle-layout) .battle-layout { display: block; flex: 1 1 auto; min-height: 0; }
+body:has(.battle-layout) .battlefield { height: 100%; min-height: 0; overflow: auto; padding: 12px 14px; }
 body:has(.battle-layout) .battle-head { margin-bottom: 8px; }
 body:has(.battle-layout) .battle-head h2 { font-size: 18px; }
 body:has(.battle-layout) .units.enemies { margin-bottom: 8px; }
@@ -1183,15 +1180,20 @@ body:has(.battle-layout) .battle-hero-placeholder,
 body:has(.battle-layout) .battle-empty-cell { min-height: 78px; }
 body:has(.battle-layout) .battlefield .unit .bar { margin-top: 4px; }
 body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 8px; }
-/* 窗口刚好卡在两列临界宽度时，五张卡不再顶出战场：优先压缩卡宽，实在放不下才让这一行横向滚 */
+/* 窗口刚好卡住时五张卡不再顶出战场：优先压缩卡宽，实在放不下才让这一行横向滚 */
 body:has(.battle-layout) .units:not(.enemies) { grid-template-columns: repeat(5, minmax(84px, 1fr)); overflow-x: auto; padding-bottom: 2px; }
-body:has(.battle-layout) .battle-side { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-body:has(.battle-layout) .battle-side .card { min-height: 0; padding: 12px 14px; }
-body:has(.battle-layout) .battle-side .card + .card { margin-top: 0; }
-/* 右栏整列都是动作记录：策略与自动连战挪进战场顶部的一条 */
-body:has(.battle-layout) .battle-log-card { flex: 1 1 auto; display: flex; flex-direction: column; }
-body:has(.battle-layout) .log { flex: 1 1 auto; height: auto; min-height: 80px; overflow: auto; }
+
+/* 最右一列：动作记录，整列通高 */
+.app-shell.battle-shell .battle-side {
+  min-width: 0; height: 100dvh; min-height: 0; padding: 10px 12px;
+  display: flex; flex-direction: column; overflow: hidden;
+  border-left: 1px solid var(--border); background: rgba(9, 13, 16, .55);
+}
+.app-shell.battle-shell .battle-log-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px; }
+.app-shell.battle-shell .log { flex: 1 1 auto; height: auto; min-height: 0; overflow: auto; }
 body:has(.battle-layout) .log li { padding: 5px 0; font-size: 11.5px; line-height: 1.45; }
+
+/* 战斗区顶部一条：策略与自动连战（原先占着右栏，现在让位给动作记录） */
 .battle-strategy-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
 .battle-strategy-strip label { margin: 0; }
 .battle-strategy-strip select { width: auto; min-width: 190px; min-height: 34px; }
@@ -1222,9 +1224,14 @@ body:has(.battle-layout) .log li { padding: 5px 0; font-size: 11.5px; line-heigh
   body:has(.battle-layout) .battle-cover-note { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
   body:has(.battle-layout) .battlefield .unit .role { display: none; }
 }
-@media (max-width: 760px) {
+@media (max-width: 1180px) { .app-shell.battle-shell { grid-template-columns: 232px minmax(0, 1fr) 280px; } }
+@media (max-width: 980px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 250px; } }
+@media (max-width: 860px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 220px; } }
+/* 窗口再窄就不硬塞三列了：记录落到战斗区下面，恢复正常滚动 */
+@media (max-width: 720px) {
+  .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr); height: auto; }
   body:has(.battle-layout) .main { height: auto; }
   body:has(.battle-layout) .page { overflow: visible; }
-  body:has(.battle-layout) .battle-layout { grid-template-columns: minmax(0, 1fr); }
-  body:has(.battle-layout) .log { height: 240px; }
+  .app-shell.battle-shell .battle-side { height: auto; border-left: 0; border-top: 1px solid var(--border); }
+  .app-shell.battle-shell .log { height: 240px; }
 }

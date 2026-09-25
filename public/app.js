@@ -1174,8 +1174,14 @@ function battleView() {
     <div class="battle-strategy-strip"><label class="fine" for="strategy">策略</label><select id="strategy" data-strategy><option value="balanced" ${strategy === 'balanced' ? 'selected' : ''}>均衡：按职责使用技能</option><option value="offense" ${strategy === 'offense' ? 'selected' : ''}>强攻：辅助倾向普攻</option><option value="survive" ${strategy === 'survive' ? 'selected' : ''}>保守：治疗与护盾优先</option></select><label class="fine strip-check"><input type="checkbox" data-auto-repeat ${autoRepeat ? 'checked' : ''} ${!model.save.unlocks.autoRepeat ? 'disabled' : ''}> 在线自动连战${model.save.unlocks.autoRepeat ? '' : '（序章后开放）'}</label><span class="fine">本场已进行 ${b.actionCount} 次行动</span></div>
     ${model.save.repeatSession?.id === b.repeatSessionId && model.save.repeatSession.pauseReason ? `<p class="banner repeat-paused">${esc(model.save.repeatSession.pauseReason)}；不会补算离线时间，请选择继续或查看。</p>` : ''}
     <div class="units enemies">${b.enemies.map((u) => unitCard(u, u.id === focusId)).join('')}</div><div class="battle-rail">点击敌人可改变下一次自由选敌技能的集火</div>${battleFormationView(b)}
-    ${ended ? `<div class="hero-actions">${b.status === 'victory' && canReadNextStoryScene() ? `<button class="btn primary" data-story-begin="${prologueProgress().nextSceneId}">继续序章</button>` : '<button class="btn primary" data-action="leave-battle">查看本轮收获 / 返回关卡</button>'}<button class="btn ghost" data-start-stage="${b.stageId}">再次挑战</button>${b.status === 'victory' && b.reward ? `<span class="tag gold">${b.reward.first ? `首胜 +${b.reward.tickets} 券 · ` : ''}+${b.reward.coins} 金币 · 装备已入库</span>` : ''}${b.status === 'stopped' ? `<span class="tag danger">已停止：${esc(b.stopReason || '未完成')}</span>` : ''}</div>${b.repeatSessionId ? repeatLedgerView(model.save.repeatSession, '本次刷关') : ''}</section>` : ''}
-    <aside class="battle-side"><article class="card battle-log-card"><h3>动作记录</h3><ol class="log">${b.logs.slice().reverse().map((line) => `<li>${esc(line)}</li>`).join('')}</ol></article></aside></div>`;
+    ${ended ? `<div class="hero-actions">${b.status === 'victory' && canReadNextStoryScene() ? `<button class="btn primary" data-story-begin="${prologueProgress().nextSceneId}">继续序章</button>` : '<button class="btn primary" data-action="leave-battle">查看本轮收获 / 返回关卡</button>'}<button class="btn ghost" data-start-stage="${b.stageId}">再次挑战</button>${b.status === 'victory' && b.reward ? `<span class="tag gold">${b.reward.first ? `首胜 +${b.reward.tickets} 券 · ` : ''}+${b.reward.coins} 金币 · 装备已入库</span>` : ''}${b.status === 'stopped' ? `<span class="tag danger">已停止：${esc(b.stopReason || '未完成')}</span>` : ''}</div>${b.repeatSessionId ? repeatLedgerView(model.save.repeatSession, '本次刷关') : ''}</section>` : ''}</div>`;
+}
+
+// 动作记录独立成整个画面最右侧的一列（挂在 .app-shell 上，不在战斗区里）。
+function battleLogPanel() {
+  const b = model?.save?.battle;
+  if (view !== 'battle' || !b || !b.logs) return '';
+  return `<aside class="battle-side" aria-label="动作记录"><article class="card battle-log-card"><h3>动作记录</h3><ol class="log">${b.logs.slice().reverse().map((line) => `<li>${esc(line)}</li>`).join('')}</ol></article></aside>`;
 }
 
 function repeatLedgerView(session, title) {
@@ -1785,7 +1791,8 @@ function render() {
   const modalOpen = Boolean(deleteSlotId || gachaPresentation || (view !== 'slots' && (storyReplay || prologueProgress().status === 'reading')) || storyArchiveOpen || collectionDetailId);
   document.body.classList.toggle('modal-open', modalOpen);
   document.body.classList.add('hall');   // 会馆内：模糊雨夜实景 + 暗色可读主题
-  app.innerHTML = `<div class="app-shell" ${modalOpen ? 'inert aria-hidden="true"' : ''}>${nav()}<div class="main">${topbar()}<main class="page">${model.mode === 'readonly' ? '<div class="banner readonly">另一个标签页正在写入；本页暂为只读。关闭旧页并等待约 20 秒后刷新可接管。</div>' : ''}${model.activeSlotId === 'test' ? '<div class="banner test-mode-banner">测试存档 · 独立保存，可在测试工作台编辑资源与领取角色</div>' : ''}${['home', 'slots', 'workbench', 'battle'].includes(view) ? '' : storyGoalBanner()}${content}</main></div></div>${renderStory()}${renderStoryArchive()}${renderGachaOverlay()}${renderCollectionDetail()}${renderDeleteSaveDialog()}`;
+  const battleLog = battleLogPanel();    // 战斗页：最右侧单独一列动作记录
+  app.innerHTML = `<div class="app-shell${battleLog ? ' battle-shell' : ''}" ${modalOpen ? 'inert aria-hidden="true"' : ''}>${nav()}<div class="main">${topbar()}<main class="page">${model.mode === 'readonly' ? '<div class="banner readonly">另一个标签页正在写入；本页暂为只读。关闭旧页并等待约 20 秒后刷新可接管。</div>' : ''}${model.activeSlotId === 'test' ? '<div class="banner test-mode-banner">测试存档 · 独立保存，可在测试工作台编辑资源与领取角色</div>' : ''}${['home', 'slots', 'workbench', 'battle'].includes(view) ? '' : storyGoalBanner()}${content}</main></div>${battleLog}</div>${renderStory()}${renderStoryArchive()}${renderGachaOverlay()}${renderCollectionDetail()}${renderDeleteSaveDialog()}`;
   initGachaCanvas();
   syncStoryTyping();
   scheduleBattle();
