@@ -133,7 +133,7 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none; }
 .battle-controls { display: flex; gap: 6px; flex-wrap: wrap; }
 .units { display: grid; grid-template-columns: repeat(5, minmax(96px, 1fr)); gap: 8px; }
 .units.enemies { grid-template-columns: repeat(3, minmax(120px, 1fr)); max-width: 70%; margin: 0 auto 34px; }
-.unit { position: relative; min-height: 156px; padding: 12px; border-radius: var(--r-md); background: var(--fog-800); box-shadow: inset 0 0 0 1px var(--border); transition: transform 150ms cubic-bezier(.23,1,.32,1), box-shadow 150ms; }
+.unit { position: relative; min-height: 156px; padding: 12px; border-radius: var(--r-md); background: var(--fog-800); box-shadow: inset 0 0 0 1px var(--border); transition: transform 150ms cubic-bezier(.23,1,.32,1), box-shadow 150ms, opacity 320ms ease, filter 320ms ease; }
 .unit.enemy { cursor: pointer; }
 .unit.enemy:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .unit.focused { box-shadow: inset 0 0 0 1px var(--herb), 0 0 22px rgba(41,108,91,.10); }
@@ -176,6 +176,22 @@ button:disabled { cursor: not-allowed; opacity: .42; transform: none; }
 .battle-fx-number.buff,.battle-fx-number.shield { font-size: 16px; }
 .battle-fx-mote { font-size: 24px; font-weight: 700; }
 .battle-fx-skill { transform: translate(-50%,-50%); white-space: nowrap; padding: 3px 9px; border-radius: 5px; font-size: 11px; color: #fff9e9; background: #24453ded; box-shadow: 0 2px 8px #183a3429; }
+/* 战斗特效：冲击环、火花、全屏闪光、大招横扫光与分级横幅 */
+.battle-fx-bolt.heavy { height: 6px; margin-top: -3px; box-shadow: 0 0 14px var(--fx-color), 0 0 30px var(--fx-color); }
+.battle-fx-ring { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--fx-color); box-shadow: 0 0 18px color-mix(in srgb, var(--fx-color) 60%, transparent), inset 0 0 14px color-mix(in srgb, var(--fx-color) 40%, transparent); }
+.battle-fx-ring.heavy { border-width: 4px; }
+.battle-fx-ring.faint { border-style: dashed; border-width: 2px; }
+.battle-fx-ring.heal { border-style: dotted; }
+.battle-fx-ring.shield { border-style: solid; border-width: 2px; }
+.battle-fx-ring.buff { border-style: double; }
+.battle-fx-spark { width: 5px; height: 5px; border-radius: 50%; background: var(--fx-color); box-shadow: 0 0 10px var(--fx-color), 0 0 20px color-mix(in srgb, var(--fx-color) 55%, transparent); }
+.battle-fx-spark.faint { width: 4px; height: 4px; }
+.battle-fx-flash { position: absolute; inset: 0; z-index: 7; pointer-events: none; background: radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--fx-color) 46%, transparent), transparent 70%); }
+.battle-fx-sweep { width: 100%; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--fx-color), transparent); box-shadow: 0 0 20px var(--fx-color); }
+.battle-fx-skill.skill-a { color: #eaf5f0; background: #1f3a34ee; box-shadow: 0 2px 10px #183a3455, inset 0 0 0 1px rgba(190,232,211,.35); }
+.battle-fx-skill.skill-p { opacity: .92; }
+.battle-fx-skill.skill-u { padding: 5px 14px; font-size: 15px; font-weight: 800; letter-spacing: .16em; color: #ffeab4; background: linear-gradient(120deg, rgba(116,81,29,.92), rgba(38,29,14,.94)); box-shadow: 0 0 24px rgba(230,189,114,.5), inset 0 0 0 1px rgba(255,214,130,.6), 0 0 0 1px rgba(0,0,0,.4); }
+.battle-fx-number.big { font-size: 26px; font-weight: 900; letter-spacing: -.02em; }
 .party-unsaved { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #d9bc76; border-radius: 8px; background: #fff5dc; color: #805816; font-size: 13px; font-weight: 600; }
 .battle-side .card + .card { margin-top: 12px; }
 .log { height: 330px; overflow: auto; margin: 0; padding: 0; list-style: none; scrollbar-width: thin; }
@@ -1158,71 +1174,86 @@ body.hall .delete-save-dialog, body.hall .collection-detail { box-shadow: 0 30px
 
 /* ── 冒险（战斗）页：整屏纵向切三块 —— 最左导航栏 | 中间战斗区 | 最右动作记录 ──
    动作记录挂在 .app-shell 的第三列（不在战斗区里面），所以它从画面顶端一直通到底部，
-   顶栏只横跨中间的战斗区。记录框自己内部滚动；战场内容多时也只让它自己滚。 */
+   顶栏只横跨中间的战斗区。记录框自己内部滚动。
+   字号与图形尺寸全部按窗口高度 clamp：窗口越高内容越大、尽量把屏幕铺满；
+   三排阵型用 flex 吃掉剩余高度，所以放大之后依然不会出现纵向滚动。 */
 .app-shell.battle-shell { grid-template-columns: 232px minmax(0, 1fr) minmax(300px, 380px); height: 100dvh; }
 body:has(.battle-layout) .main { height: 100dvh; min-width: 0; display: flex; flex-direction: column; }
-body:has(.battle-layout) .topbar { min-height: 60px; padding: 8px 20px; }
+body:has(.battle-layout) .topbar { min-height: clamp(56px, 6.6vh, 76px); padding: clamp(6px, 1vh, 14px) clamp(16px, 1.6vw, 28px); }
+body:has(.battle-layout) .topbar h1 { font-size: clamp(18px, 2.1vh, 27px); }
 body:has(.battle-layout) .page {
   flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; margin: 0;
-  padding: 10px 12px 10px 16px; display: flex; flex-direction: column; overflow: hidden;
+  padding: clamp(8px, 1.2vh, 18px) clamp(10px, 1vh, 16px) clamp(8px, 1.2vh, 18px) clamp(12px, 1.4vw, 22px);
+  display: flex; flex-direction: column; overflow: hidden;
 }
 body:has(.battle-layout) .battle-layout { display: block; flex: 1 1 auto; min-height: 0; }
-body:has(.battle-layout) .battlefield { height: 100%; min-height: 0; overflow: auto; padding: 12px 14px; }
-body:has(.battle-layout) .battle-head { margin-bottom: 8px; }
-body:has(.battle-layout) .battle-head h2 { font-size: 18px; }
-body:has(.battle-layout) .units.enemies { margin-bottom: 8px; }
-body:has(.battle-layout) .battle-rail { margin: 8px 0; padding-top: 7px; font-size: 10.5px; }
-body:has(.battle-layout) .battle-cover-note { margin: 5px 0 8px; padding: 6px 9px; font-size: 10.5px; line-height: 1.5; }
-body:has(.battle-layout) .battle-formation-label { margin: 5px 0 3px; font-size: 11px; }
-body:has(.battle-layout) .battle-formation-row { gap: 6px; }
-body:has(.battle-layout) .battlefield .unit { min-height: 78px; padding: 7px 9px; }
+body:has(.battle-layout) .battlefield {
+  height: 100%; min-height: 0; overflow: auto; display: flex; flex-direction: column;
+  padding: clamp(10px, 1.5vh, 22px) clamp(12px, 1.6vh, 24px);
+}
+body:has(.battle-layout) .battle-head { margin-bottom: clamp(6px, 1vh, 14px); }
+body:has(.battle-layout) .battle-head h2 { font-size: clamp(17px, 2.2vh, 28px); }
+body:has(.battle-layout) .battle-head .eyebrow { font-size: clamp(11px, 1.25vh, 15px); }
+body:has(.battle-layout) .battle-controls .btn { min-height: clamp(32px, 3.9vh, 46px); font-size: clamp(12px, 1.3vh, 16px); }
+body:has(.battle-layout) .units.enemies { margin-bottom: clamp(6px, 1vh, 14px); }
+body:has(.battle-layout) .battle-rail { margin: clamp(5px, .8vh, 12px) 0; padding-top: clamp(5px, .8vh, 12px); font-size: clamp(10.5px, 1.2vh, 14px); }
+body:has(.battle-layout) .battle-cover-note { margin: clamp(4px, .7vh, 10px) 0 clamp(6px, .9vh, 12px); padding: clamp(5px, .8vh, 11px) clamp(8px, 1vh, 14px); font-size: clamp(10.5px, 1.2vh, 14px); line-height: 1.5; }
+body:has(.battle-layout) .battle-formation { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+body:has(.battle-layout) .battle-formation > p.fine:first-child { font-size: clamp(11px, 1.25vh, 14px); margin: 0 0 clamp(2px, .4vh, 6px); }
+body:has(.battle-layout) .battle-formation-label { margin: clamp(4px, .6vh, 9px) 0 clamp(2px, .35vh, 6px); font-size: clamp(11px, 1.25vh, 14px); }
+body:has(.battle-layout) .battle-formation-row { flex: 1 1 auto; gap: clamp(5px, .7vh, 12px); }
+/* 单位卡本身也是 flex 列：卡被拉高时，行动条沉到卡底，不会留一片空白 */
+body:has(.battle-layout) .battlefield .unit {
+  display: flex; flex-direction: column;
+  min-height: clamp(78px, 10.5vh, 150px);
+  padding: clamp(6px, 1vh, 14px) clamp(8px, 1.1vh, 16px);
+}
 body:has(.battle-layout) .battle-hero-placeholder,
-body:has(.battle-layout) .battle-empty-cell { min-height: 78px; }
-body:has(.battle-layout) .battlefield .unit .bar { margin-top: 4px; }
-body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 8px; }
+body:has(.battle-layout) .battle-empty-cell { min-height: clamp(78px, 10.5vh, 150px); }
+body:has(.battle-layout) .battle-hero-placeholder strong { font-size: clamp(17px, 2.1vh, 28px); }
+body:has(.battle-layout) .unit h3 { font-size: clamp(12.5px, 1.5vh, 18px); }
+body:has(.battle-layout) .unit .role { font-size: clamp(9.5px, 1.1vh, 13px); margin-top: clamp(2px, .3vh, 5px); }
+body:has(.battle-layout) .unit .energy { font-size: clamp(9.5px, 1.05vh, 13px); }
+body:has(.battle-layout) .unit .unit-numbers { font-size: clamp(9.5px, 1.1vh, 13px); line-height: 1.25; margin-top: clamp(1px, .25vh, 5px); }
+body:has(.battle-layout) .battlefield .unit .bar { margin-top: clamp(3px, .5vh, 8px); }
+body:has(.battle-layout) .battlefield .unit .bar.hp { height: clamp(6px, .8vh, 12px); }
+body:has(.battle-layout) .battlefield .unit .bar.shield { height: clamp(3px, .38vh, 6px); }
+body:has(.battle-layout) .battlefield .unit .bar.action { height: clamp(3px, .45vh, 7px); margin-top: auto; }
 /* 窗口刚好卡住时五张卡不再顶出战场：优先压缩卡宽，实在放不下才让这一行横向滚 */
 body:has(.battle-layout) .units:not(.enemies) { grid-template-columns: repeat(5, minmax(84px, 1fr)); overflow-x: auto; padding-bottom: 2px; }
+/* 飘字、特效横幅也跟着放大 */
+body:has(.battle-layout) .battle-fx-number { font-size: clamp(20px, 2.4vh, 34px); }
+body:has(.battle-layout) .battle-fx-number.big { font-size: clamp(26px, 3.1vh, 44px); }
+body:has(.battle-layout) .battle-fx-number.buff, body:has(.battle-layout) .battle-fx-number.shield { font-size: clamp(16px, 1.9vh, 26px); }
+body:has(.battle-layout) .battle-fx-mote { font-size: clamp(22px, 2.6vh, 34px); }
+body:has(.battle-layout) .battle-fx-skill { font-size: clamp(11px, 1.3vh, 15px); }
+body:has(.battle-layout) .battle-fx-skill.skill-u { font-size: clamp(15px, 1.8vh, 22px); }
 
 /* 最右一列：动作记录，整列通高 */
 .app-shell.battle-shell .battle-side {
-  min-width: 0; height: 100dvh; min-height: 0; padding: 10px 12px;
+  min-width: 0; height: 100dvh; min-height: 0; padding: clamp(8px, 1.1vh, 16px) clamp(10px, 1.2vh, 18px);
   display: flex; flex-direction: column; overflow: hidden;
   border-left: 1px solid var(--border); background: rgba(9, 13, 16, .55);
 }
-.app-shell.battle-shell .battle-log-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px; }
+.app-shell.battle-shell .battle-log-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: clamp(10px, 1.3vh, 18px) clamp(12px, 1.4vh, 20px); }
+.app-shell.battle-shell .battle-log-card h3 { font-size: clamp(13px, 1.5vh, 18px); }
 .app-shell.battle-shell .log { flex: 1 1 auto; height: auto; min-height: 0; overflow: auto; }
-body:has(.battle-layout) .log li { padding: 5px 0; font-size: 11.5px; line-height: 1.45; }
+body:has(.battle-layout) .log li { padding: clamp(5px, .7vh, 10px) 0; font-size: clamp(11.5px, 1.3vh, 15px); line-height: 1.45; }
 
 /* 战斗区顶部一条：策略与自动连战（原先占着右栏，现在让位给动作记录） */
-.battle-strategy-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.battle-strategy-strip { display: flex; flex-wrap: wrap; align-items: center; gap: clamp(8px, 1vh, 14px); margin-bottom: clamp(6px, 1vh, 14px); font-size: clamp(12px, 1.35vh, 16px); }
 .battle-strategy-strip label { margin: 0; }
-.battle-strategy-strip select { width: auto; min-width: 190px; min-height: 34px; }
+.battle-strategy-strip select { width: auto; min-width: clamp(180px, 16vw, 260px); min-height: clamp(32px, 4vh, 46px); font-size: clamp(12.5px, 1.45vh, 17px); }
 .battle-strategy-strip .strip-check { display: flex; align-items: center; gap: 6px; }
 .battle-strategy-strip > span.fine { margin-left: auto; }
 
-/* 矮屏（1080p 以下、含 1366×768）压一档：
-   单位卡的高度是被内容撑开的，min-height 压不动，所以这里直接把卡内字号与行距收紧，
-   四行卡片（敌人一行 + 我方三排）各让出二十来像素，后排就能留在首屏里。 */
-@media (max-height: 860px) {
-  body:has(.battle-layout) .battlefield .unit { padding: 6px 8px; }
-  body:has(.battle-layout) .unit h3 { font-size: 12px; }
-  body:has(.battle-layout) .unit .role { font-size: 9px; margin-top: 2px; }
-  body:has(.battle-layout) .unit .energy { font-size: 9px; }
-  body:has(.battle-layout) .unit .unit-numbers { font-size: 9px; line-height: 1.2; margin-top: 1px; }
-  body:has(.battle-layout) .battlefield .unit .bar { margin-top: 3px; }
-  body:has(.battle-layout) .battlefield .unit .bar.action { margin-top: 5px; }
-  body:has(.battle-layout) .battlefield .unit .bar.hp { height: 6px; }
-  body:has(.battle-layout) .battle-head h2 { font-size: 16px; }
-  body:has(.battle-layout) .battle-head { margin-bottom: 6px; }
-  body:has(.battle-layout) .battle-rail { margin: 5px 0 6px; padding-top: 5px; }
-  body:has(.battle-layout) .battle-cover-note { font-size: 10px; line-height: 1.45; margin: 4px 0 6px; padding: 5px 8px; }
-  body:has(.battle-layout) .battle-formation-label { margin: 4px 0 2px; }
-  body:has(.battle-layout) .battle-formation > p.fine:first-child { font-size: 11px; margin: 0 0 2px; }
-}
-/* 720p 左右的笔记本再紧一档：掩护说明收到一行 */
-@media (max-height: 720px) {
+/* 更矮的窗口（720p 笔记本）再收一档：掩护说明收成一行，保证后排仍在首屏 */
+@media (max-height: 760px) {
   body:has(.battle-layout) .battle-cover-note { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+}
+@media (max-height: 700px) {
   body:has(.battle-layout) .battlefield .unit .role { display: none; }
+  body:has(.battle-layout) .battle-head h2 { font-size: 16px; }
 }
 @media (max-width: 1180px) { .app-shell.battle-shell { grid-template-columns: 232px minmax(0, 1fr) 280px; } }
 @media (max-width: 980px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 250px; } }
