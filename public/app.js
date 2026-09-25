@@ -55,7 +55,7 @@ let storyArchiveOpen = false;
 // 剧情逐字显示：storySource 由 renderStory 每次渲染写入，storyTyping 保存当前这句的进度。
 let storySource = null;
 let storyTyping = null;
-const STORY_TYPE_MS = 26;
+const STORY_TYPE_MS = 40;   // 逐字浮现的间隔：数值越大，字幕出现得越慢
 let storyInstant = localStorage.getItem('mist-story-instant') === 'on'
   || (localStorage.getItem('mist-story-instant') === null && systemReduceMotion);
 let clockOffset = 0;

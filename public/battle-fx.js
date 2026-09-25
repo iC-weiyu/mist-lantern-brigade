@@ -11,11 +11,12 @@ export function clearBattleEffects() {
 }
 
 export function playBattleEffects(root, battle, previous, speed = 1, reducedMotion = false) {
-  clearBattleEffects();
   const event = battle?.lastEvent;
   if (!event?.effects?.length || !previous || previous.id !== battle.id || previous.actionCount === battle.actionCount) return;
   const field = root.querySelector('.battlefield');
   if (!field) return;
+  // 不在这里清掉上一轮特效：每次行动间隔只有 660ms，清掉会让特效被硬切断、看不清。
+  // 特效节点各自在动画播完后自己移除（见 retire），离开战斗页时再由 clearBattleEffects 统一收尾。
   const duration = 600 / Math.max(1, Math.min(5, speed));
   const units = new Map([...root.querySelectorAll('[data-unit-id]')].map(node => [node.dataset.unitId, node]));
   const actor = units.get(event.actorId);
@@ -29,6 +30,15 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
   const layer = document.createElement('div');
   layer.className = 'battle-fx-layer'; layer.setAttribute('aria-hidden', 'true'); field.append(layer);
   cleanup.push(() => layer.remove());
+  const retire = (node) => {
+    const animations = node.getAnimations?.() || [];
+    const done = animations.length ? Promise.allSettled(animations.map(animation => animation.finished)) : Promise.resolve();
+    done.then(() => {
+      node.remove();
+      if (layer.isConnected && !layer.children.length) layer.remove();
+    });
+    cleanup.push(() => node.remove());
+  };
   const spawn = (className, point, text = '') => {
     const node = document.createElement('span'); node.className = className; node.textContent = text;
     node.style.left = `${point.x}px`; node.style.top = `${point.y}px`; layer.append(node); return node;
@@ -41,6 +51,8 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
   // 大招，或者一击打掉目标两成以上血：算「重击」，表现加强
   const heavy = event.skill === 'U' || Boolean(strikeUnit && strike.hpDamage / Math.max(1, strikeUnit.maxHp) >= 0.22);
   const accent = event.skill === 'U' ? '#ffd479' : '#e8935f';
+  // 弹道飞到目标、命中炸开，各占一段；命中之后的表现刻意留长一点，方便看清
+  const impactDelay = effect => (effect.kind === 'dot' ? 0 : duration * .55);
 
   // 1. 施法者：前冲 + 技能横幅（大招更大更亮，并横扫一道光）
   if (actor && event.skill) {
@@ -55,10 +67,10 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
     if (!reducedMotion) animate(actor, [
       { transform: 'translate(0,0)', offset: 0 },
       { transform: `translate(${-dx * 0.15}px,${-dy * 0.15}px) scale(.99)`, offset: .12 },
-      { transform: `translate(${dx}px,${dy}px) scale(${event.skill === 'U' ? 1.06 : 1.035})`, offset: .33 },
-      { transform: 'translate(0,0)', offset: .68 },
+      { transform: `translate(${dx}px,${dy}px) scale(${event.skill === 'U' ? 1.06 : 1.035})`, offset: .4 },
+      { transform: 'translate(0,0)', offset: .78 },
       { transform: 'translate(0,0)', offset: 1 },
-    ]);
+    ], { duration: duration * 1.15 });
     const tier = event.skill === 'U' ? 'u' : event.skill === 'A' ? 'a' : 'p';
     const name = event.skill === 'U' ? '终极技' : event.skill === 'A' ? '主动技' : '普攻';
     const point = center(actor);
@@ -66,9 +78,10 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
     animate(label, [
       { opacity: 0, transform: 'translate(-50%,-50%) scale(.82)' },
       { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: .16 },
-      { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: .72 },
+      { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: .68 },
       { opacity: 0, transform: 'translate(-50%,-50%) scale(1.05)' },
-    ], { duration: duration * (event.skill === 'U' ? 1 : .8) });
+    ], { duration: duration * (event.skill === 'U' ? 1.25 : 1) });
+    retire(label);
     if (event.skill === 'U' && !reducedMotion) {
       const sweep = spawn('battle-fx-sweep', { x: box.width / 2, y: point.y + 26 });
       sweep.style.setProperty('--fx-color', accent);
@@ -76,7 +89,8 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
         { opacity: 0, transform: 'translate(-50%,-50%) scaleX(.05)' },
         { opacity: .95, offset: .3, transform: 'translate(-50%,-50%) scaleX(1)' },
         { opacity: 0, transform: 'translate(-50%,-50%) scaleX(1)' },
-      ], { duration: duration * .7, easing: 'cubic-bezier(.2,.8,.3,1)' });
+      ], { duration: duration * .95, easing: 'cubic-bezier(.2,.8,.3,1)' });
+      retire(sweep);
     }
   }
 
@@ -86,7 +100,7 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
     if (!target || effect.amount === 0) continue;
     const isHit = ['damage', 'dot'].includes(effect.kind);
     const point = center(target);
-    const impactDelay = effect.kind === 'dot' ? 0 : duration * .32;
+    const delay = impactDelay(effect);
     const color = isHit ? '#c65b34' : effect.kind === 'heal' ? '#2d9864' : effect.kind === 'shield' ? '#3d9ac9' : '#b88825';
     const isHeavyHit = isHit && heavy && effect.kind === 'damage';
     if (actor && effect.kind === 'damage' && !reducedMotion) {
@@ -96,13 +110,15 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
       animate(bolt, [
         { transform: `translate(0,0) rotate(${angle}deg) scaleX(.3)`, opacity: 0 },
         { opacity: 1, offset: .18 },
-        { transform: `translate(${dx}px,${dy}px) rotate(${angle}deg) scaleX(1.3)`, opacity: 1, offset: .87 },
+        { transform: `translate(${dx}px,${dy}px) rotate(${angle}deg) scaleX(1.3)`, opacity: 1, offset: .94 },
         { transform: `translate(${dx}px,${dy}px) rotate(${angle}deg)`, opacity: 0 },
-      ], { duration: duration * .32 });
+      ], { duration: delay + duration * .1 });
+      retire(bolt);
     }
     const glow = document.createElement('span'); glow.className = `battle-fx-glow ${isHit ? 'hit' : effect.kind}`;
     glow.style.setProperty('--fx-color', color); target.append(glow);
-    animate(glow, [{ opacity: 0 }, { opacity: .9, offset: .2 }, { opacity: 0 }], { delay: impactDelay, duration: duration * .62 });
+    animate(glow, [{ opacity: 0 }, { opacity: .9, offset: .18 }, { opacity: .55, offset: .55 }, { opacity: 0 }], { delay, duration: duration * .9 });
+    retire(glow);
 
     // 冲击环：命中扩散一圈，重击再补一圈更大的
     if (!reducedMotion) {
@@ -111,8 +127,10 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
       animate(ring, [
         { opacity: 0, transform: 'translate(-50%,-50%) scale(.3)' },
         { opacity: .95, offset: .2, transform: `translate(-50%,-50%) scale(${isHeavyHit ? 1.1 : .9})` },
+        { opacity: .5, offset: .6, transform: `translate(-50%,-50%) scale(${isHeavyHit ? 2.4 : 1.8})` },
         { opacity: 0, transform: `translate(-50%,-50%) scale(${isHeavyHit ? 3.4 : 2.4})` },
-      ], { delay: impactDelay, duration: duration * (isHeavyHit ? .74 : .52), easing: 'cubic-bezier(.2,.7,.3,1)' });
+      ], { delay, duration: duration * (isHeavyHit ? 1.05 : .9), easing: 'cubic-bezier(.2,.7,.3,1)' });
+      retire(ring);
       if (isHeavyHit) {
         const outer = spawn('battle-fx-ring faint', point);
         outer.style.setProperty('--fx-color', accent);
@@ -120,7 +138,8 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
           { opacity: 0, transform: 'translate(-50%,-50%) scale(.5)' },
           { opacity: .6, offset: .3, transform: 'translate(-50%,-50%) scale(2.2)' },
           { opacity: 0, transform: 'translate(-50%,-50%) scale(4.6)' },
-        ], { delay: impactDelay + duration * .06, duration: duration * .8 });
+        ], { delay: delay + duration * .08, duration: duration * 1.1 });
+        retire(outer);
       }
     }
     // 火花：命中后向外飞溅
@@ -134,32 +153,36 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
         animate(spark, [
           { opacity: 0, transform: 'translate(-50%,-50%) scale(.5)' },
           { opacity: 1, offset: .12, transform: 'translate(-50%,-50%) scale(1.1)' },
+          { opacity: .8, offset: .55, transform: `translate(calc(-50% + ${Math.cos(angle) * reach * .7}px), calc(-50% + ${Math.sin(angle) * reach * .7 + 4}px)) scale(.85)` },
           { opacity: 0, transform: `translate(calc(-50% + ${Math.cos(angle) * reach}px), calc(-50% + ${Math.sin(angle) * reach + 12}px)) scale(.5)` },
-        ], { delay: impactDelay, duration: duration * (isHeavyHit ? .6 : .48) });
+        ], { delay, duration: duration * (isHeavyHit ? .95 : .8) });
+        retire(spark);
       }
     }
     if (isHit && !reducedMotion && target !== actor) animate(target, [
       { transform: 'translateX(0)' }, { transform: `translateX(${isHeavyHit ? -9 : -5}px)`, offset: .13 },
       { transform: `translateX(${isHeavyHit ? 7 : 4}px)`, offset: .28 }, { transform: `translateX(${isHeavyHit ? -4 : -2}px)`, offset: .45 },
       { transform: 'translateX(0)', offset: 1 },
-    ], { delay: impactDelay, duration: duration * (isHeavyHit ? .56 : .5) });
+    ], { delay, duration: duration * .75 });
     const text = isHit ? `${effect.kind === 'dot' ? '持续 ' : ''}${effect.hpDamage ? `−${effect.hpDamage}` : ''}${effect.absorbed ? ` 盾挡 ${effect.absorbed}` : ''}`
       : effect.kind === 'heal' ? `+${effect.amount}` : effect.kind === 'shield' ? `护盾 +${effect.amount}` : `攻击 ↑${Math.round(effect.amount * 100)}%`;
     const label = spawn(`battle-fx-number ${isHit ? 'damage' : effect.kind}${isHeavyHit ? ' big' : ''}`, { x: point.x, y: point.y - 2 + (effect.kind === 'dot' ? -20 : 0) }, text);
     animate(label, [
       { opacity: 0, transform: `translate(-50%, 6px) scale(${isHeavyHit ? .8 : .85})` },
-      { opacity: 1, transform: `translate(-50%, -10px) scale(${isHeavyHit ? 1.3 : 1.06})`, offset: .18 },
-      { opacity: 1, offset: .73 },
+      { opacity: 1, transform: `translate(-50%, -10px) scale(${isHeavyHit ? 1.3 : 1.06})`, offset: .16 },
+      { opacity: 1, offset: .6 },
       { opacity: 0, transform: `translate(-50%, ${reducedMotion ? -8 : isHeavyHit ? -38 : -30}px) scale(${isHeavyHit ? 1.15 : 1})` },
-    ], { delay: impactDelay, duration: duration * (isHeavyHit ? .8 : .65) });
+    ], { delay, duration: duration * (isHeavyHit ? 1.15 : 1) });
+    retire(label);
     if (!isHit && !reducedMotion) for (let n = 0; n < 3; n++) {
       const mote = spawn(`battle-fx-mote ${effect.kind}`, { x: point.x + (n - 1) * 28, y: point.y + 24 }, effect.kind === 'heal' ? '+' : effect.kind === 'buff' ? '↑' : '◇');
-      animate(mote, [{ opacity: 0, transform: 'translateY(0)' }, { opacity: .8, offset: .3 }, { opacity: 0, transform: 'translateY(-48px)' }], { delay: impactDelay + n * duration * .04, duration: duration * .53 });
+      animate(mote, [{ opacity: 0, transform: 'translateY(0)' }, { opacity: .8, offset: .3 }, { opacity: 0, transform: 'translateY(-48px)' }], { delay: delay + n * duration * .06, duration: duration * .85 });
+      retire(mote);
     }
     const old = before.get(effect.targetId), next = after.get(effect.targetId);
     if (old && next) for (const [kind, oldValue, newValue] of [['hp', old.hp / old.maxHp * 100, next.hp / next.maxHp * 100], ['shield', Math.min(100, old.shield / old.maxHp * 200), Math.min(100, next.shield / next.maxHp * 200)]]) {
       const bar = target.querySelector(`.bar.${kind} > span`);
-      if (bar && oldValue !== newValue) animate(bar, [{ width: `${oldValue}%` }, { width: `${newValue}%` }], { delay: impactDelay, duration: duration * .4 });
+      if (bar && oldValue !== newValue) animate(bar, [{ width: `${oldValue}%` }, { width: `${newValue}%` }], { delay, duration: duration * .7 });
     }
   }
 
@@ -168,7 +191,8 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
     const flash = document.createElement('span');
     flash.className = 'battle-fx-flash'; flash.setAttribute('aria-hidden', 'true'); flash.style.setProperty('--fx-color', accent);
     field.append(flash); cleanup.push(() => flash.remove());
-    animate(flash, [{ opacity: 0 }, { opacity: event.skill === 'U' ? .38 : .26, offset: .16 }, { opacity: 0 }], { duration: duration * (event.skill === 'U' ? .9 : .7) });
+    const animation = animate(flash, [{ opacity: 0 }, { opacity: event.skill === 'U' ? .38 : .26, offset: .18 }, { opacity: 0 }], { duration: duration * (event.skill === 'U' ? 1.1 : .85) });
+    Promise.allSettled([animation.finished]).then(() => flash.remove());
   }
 
   // 4. 这一击打倒了谁：塌陷 + 灰环 + 余烬
@@ -182,14 +206,15 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
       { transform: 'scale(1.06) rotate(0deg)' },
       { transform: 'scale(.9) rotate(-3deg)', offset: .55 },
       { transform: 'scale(.94) rotate(-2deg)' },
-    ], { delay: duration * .34, duration: duration * .62, easing: 'cubic-bezier(.3,.1,.4,1)' });
+    ], { delay: duration * .55, duration: duration * .85, easing: 'cubic-bezier(.3,.1,.4,1)' });
     const ring = spawn('battle-fx-ring faint', point);
     ring.style.setProperty('--fx-color', '#9fb0aa');
     animate(ring, [
       { opacity: 0, transform: 'translate(-50%,-50%) scale(.4)' },
       { opacity: .55, offset: .25, transform: 'translate(-50%,-50%) scale(1.8)' },
       { opacity: 0, transform: 'translate(-50%,-50%) scale(3.6)' },
-    ], { delay: duration * .36, duration: duration * .7 });
+    ], { delay: duration * .58, duration: duration * .95 });
+    retire(ring);
     for (let n = 0; n < 5; n += 1) {
       const angle = EMBER_ANGLES[n % EMBER_ANGLES.length] * Math.PI / 180;
       const reach = 26 + n * 6;
@@ -199,7 +224,8 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
         { opacity: 0, transform: 'translate(-50%,-50%) scale(.8)' },
         { opacity: .8, offset: .2, transform: 'translate(-50%,-50%) scale(1)' },
         { opacity: 0, transform: `translate(calc(-50% + ${Math.cos(angle) * reach}px), calc(-50% + ${Math.sin(angle) * reach - 6}px)) scale(.4)` },
-      ], { delay: duration * .36 + n * duration * .05, duration: duration * .7 });
+      ], { delay: duration * .58 + n * duration * .07, duration: duration * .95 });
+      retire(ember);
     }
   }
 }

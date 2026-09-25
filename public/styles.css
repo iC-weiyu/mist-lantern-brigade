@@ -616,8 +616,6 @@ select, input[type="text"] { width: 100%; padding: 0 12px; border: 1px solid var
   .nav-link { justify-content: center; padding: 0; }
   .hero, .pool-banner { grid-template-columns: 1fr; }
   .battle-side .card + .card { margin-top: 0; }
-  .units { overflow-x: auto; grid-template-columns: repeat(5, 126px); padding-bottom: 4px; }
-  .units.enemies { max-width: none; grid-template-columns: repeat(3, 140px); justify-content: center; }
   .collection-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .collection-search { grid-column: span 2; }
 }
@@ -1201,7 +1199,7 @@ body:has(.battle-layout) .battle-cover-note { margin: clamp(4px, .7vh, 10px) 0 c
 body:has(.battle-layout) .battle-formation { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 body:has(.battle-layout) .battle-formation > p.fine:first-child { font-size: clamp(11px, 1.25vh, 14px); margin: 0 0 clamp(2px, .4vh, 6px); }
 body:has(.battle-layout) .battle-formation-label { margin: clamp(4px, .6vh, 9px) 0 clamp(2px, .35vh, 6px); font-size: clamp(11px, 1.25vh, 14px); }
-body:has(.battle-layout) .battle-formation-row { flex: 1 1 auto; gap: clamp(5px, .7vh, 12px); }
+body:has(.battle-layout) .battle-formation-row { flex: 1 1 auto; gap: var(--bf-gap); }
 /* 单位卡本身也是 flex 列：卡被拉高时，行动条沉到卡底，不会留一片空白 */
 body:has(.battle-layout) .battlefield .unit {
   display: flex; flex-direction: column;
@@ -1220,7 +1218,16 @@ body:has(.battle-layout) .battlefield .unit .bar.hp { height: clamp(6px, .8vh, 1
 body:has(.battle-layout) .battlefield .unit .bar.shield { height: clamp(3px, .38vh, 6px); }
 body:has(.battle-layout) .battlefield .unit .bar.action { height: clamp(3px, .45vh, 7px); margin-top: auto; }
 /* 窗口刚好卡住时五张卡不再顶出战场：优先压缩卡宽，实在放不下才让这一行横向滚 */
-body:has(.battle-layout) .units:not(.enemies) { grid-template-columns: repeat(5, minmax(84px, 1fr)); overflow-x: auto; padding-bottom: 2px; }
+body:has(.battle-layout) { --bf-gap: clamp(5px, .7vh, 12px); }
+body:has(.battle-layout) .units:not(.enemies) { grid-template-columns: repeat(5, minmax(84px, 1fr)); gap: var(--bf-gap); overflow-x: auto; padding-bottom: 2px; }
+/* 敌方牌改成和友方牌同样宽：战斗页用的是九宫格三列，敌方行也用三列、同样的间距，
+   整行铺满战场（原先写死 max-width:70%，每张只有友方的一半宽）。 */
+body:has(.battle-layout) .units.enemies {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--bf-gap);
+  max-width: none;
+  margin: clamp(6px, 1vh, 14px) 0;
+}
 /* 飘字、特效横幅也跟着放大 */
 body:has(.battle-layout) .battle-fx-number { font-size: clamp(20px, 2.4vh, 34px); }
 body:has(.battle-layout) .battle-fx-number.big { font-size: clamp(26px, 3.1vh, 44px); }
