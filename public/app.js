@@ -1647,7 +1647,7 @@ function titleView() {
     ${titleAudioButton()}
     <section class="title-stage">
       <header class="title-brand">
-        <p class="eyebrow">Mist Lantern Brigade · v0.2.2</p>
+        <p class="eyebrow">Mist Lantern Brigade · v0.2.3</p>
         <h1>雾灯旅团</h1>
         <p class="title-tagline">夜雨千山，微光烁烁，不问来路，只将那些离散的人，缓缓渡回此间</p>
       </header>
