@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { ensureProtagonist, DEFAULT_PROTAGONIST_NAME } from './protagonist.mjs';
 import { ensureFormation, applyFormationBonus, formationRowIndex, FORMATION_ROW_KEYS } from './formation.mjs';
+import { addSelectorEntitlement, currentLowCandidates, currentRarity, currentSsrCandidates, ensureCatalogState, recycleRewardFor, takeSelectorEntitlement, validateWishSelection } from './character-state.mjs';
 
 export const SAVE_VERSION = 1;
 export const BATTLE_BALANCE = Object.freeze({
@@ -122,7 +123,7 @@ export function createSave(content) {
     gacha: {
       totalPulls: 0, regularPity: 0, beginnerPity: 0, srPity: 0, beginnerPulls: 0,
       commonWishes: ['', '', ''], beginnerWishes: ['', '', ''], pastMode: false,
-      selectors: { common: 0, past: 0 }, lastResults: [], lastBatchId: null,
+      selectors: { common: 0, past: 0 }, selectorEntitlements: { common: [], past: [] }, lastResults: [], lastBatchId: null,
     },
     story: {
       introSeen: false, clearedStages: [], claimedRewards: ['open_door_10'], archive: [],
@@ -131,7 +132,7 @@ export function createSave(content) {
     unlocks: { commonPool: true, beginnerPool: true, themePool: false, autoRepeat: false, equipment: false },
     strategies: Object.fromEntries(content.characters.map((c) => [c.id, 'balanced'])),
     equipment: starterEquipment(), equipped: {}, battle: null, repeatSession: null, repeatSummary: null,
-    rngState: crypto.randomBytes(4).readUInt32LE() || 0x6d2b79f5, transactions: {},
+    rngState: crypto.randomBytes(4).readUInt32LE() || 0x6d2b79f5, transactions: {}, catalog: { version: 'batch-e-v1.5' },
   };
 }
 
@@ -305,11 +306,12 @@ function wishPick(save, wishes, share, candidates) {
 }
 
 function ssrForPool(save, content, pool) {
-  const standard = content.characters.filter((c) => c.pool === 'standard').map((c) => c.id);
-  const past = content.characters.filter((c) => c.pool === 'past').map((c) => c.id);
-  const current = content.characters.filter((c) => c.pool === 'current').map((c) => c.id);
-  if (pool === 'common') return wishPick(save, save.gacha.commonWishes, 0.1, standard);
-  if (pool === 'beginner') return wishPick(save, save.gacha.beginnerWishes, 0.3, standard);
+  ensureCatalogState(save, content);
+  const standard = currentSsrCandidates(content, 'standard');
+  const past = currentSsrCandidates(content, 'past');
+  const current = currentSsrCandidates(content, 'current');
+  if (pool === 'common') return wishPick(save, save.gacha.commonWishes.filter((id) => standard.includes(id)), 0.1, standard);
+  if (pool === 'beginner') return wishPick(save, save.gacha.beginnerWishes.filter((id) => standard.includes(id)), 0.3, standard);
   const r = randomFloat(save);
   if (save.gacha.pastMode) return r < 0.3 ? pick(standard, save) : pick(past, save);
   if (r < 0.4) return pick(current, save);
@@ -325,9 +327,8 @@ export function performGacha(save, content, pool, requestedCount, { free = false
   let count = free ? requestedCount : Math.min(requestedCount, save.currencies.tickets);
   if (pool === 'beginner') count = Math.min(count, 40 - save.gacha.beginnerPulls);
   if (count <= 0) throw new Error(pool === 'beginner' ? '新手招募次数已用完或招募券不足' : '招募券不足');
-  const low = content.characters.filter((c) => c.pool === 'low');
-  const sr = low.filter((c) => c.rarity === 'SR').map((c) => c.id);
-  const r = low.filter((c) => c.rarity === 'R').map((c) => c.id);
+  const sr = currentLowCandidates(content, 'SR');
+  const r = currentLowCandidates(content, 'R');
   const results = [];
   for (let i = 0; i < count; i++) {
     const pityKey = pool === 'beginner' ? 'beginnerPity' : 'regularPity';
@@ -347,14 +348,14 @@ export function performGacha(save, content, pool, requestedCount, { free = false
       }
     }
     const isNew = !save.owned[characterId];
-    if (isNew) save.owned[characterId] = { level: 1, breakthrough: 0, dupes: 0, investedXp: 0, investedCoins: 0 };
+    if (isNew) save.owned[characterId] = { level: 1, breakthrough: 0, dupes: 0, investedXp: 0, investedCoins: 0, acquiredRarity: rarity };
     else save.owned[characterId].dupes += 1;
     discoverCharacter(save, characterId, isNew);
     results.push({ characterId, rarity, isNew });
     save.gacha.totalPulls += 1;
     if (pool === 'beginner') save.gacha.beginnerPulls += 1;
-    if (save.gacha.totalPulls % 200 === 0) save.gacha.selectors.common += 1;
-    if (save.gacha.totalPulls % 500 === 0) save.gacha.selectors.past += 1;
+    if (save.gacha.totalPulls % 200 === 0) addSelectorEntitlement(save, content, 'common');
+    if (save.gacha.totalPulls % 500 === 0) addSelectorEntitlement(save, content, 'past');
   }
   if (!free) save.currencies.tickets -= count;
   save.gacha.lastResults = results;
@@ -909,22 +910,26 @@ export function breakthrough(save, characterId) {
 }
 
 export function recycleDupe(save, characterId, content) {
+  ensureCatalogState(save, content);
   const owned = save.owned[characterId];
   if (!owned || owned.dupes < 1) throw new Error('没有可回收凭证');
-  const isSsr = /^(C|N)/.test(characterId);
+  const character = content.characters.find((c) => c.id === characterId);
+  if (!character) throw new Error('角色不存在');
+  const reward = recycleRewardFor(character);
   owned.dupes -= 1;
-  if (isSsr) save.currencies.contractShards += 100;
-  else save.currencies.equipmentDust += content.characters.find((c) => c.id === characterId)?.rarity === 'SR' ? 40 : 10;
-  return isSsr ? 100 : 0;
+  save.currencies.contractShards += reward;
+  return reward;
 }
 
 export function chooseSelector(save, characterId, kind, content) {
+  ensureCatalogState(save, content);
   const character = content.characters.find((c) => c.id === characterId);
-  if (!character || (kind === 'common' && character.pool !== 'standard') || (kind === 'past' && character.pool !== 'past')) throw new Error('角色不在该自选范围');
-  if (save.gacha.selectors[kind] < 1) throw new Error('没有可用自选包');
-  save.gacha.selectors[kind] -= 1;
+  if (!character || !['common', 'past'].includes(kind)) throw new Error('角色不在该自选范围');
+  const entitlement = takeSelectorEntitlement(save, content, kind, characterId);
+  if (!entitlement) throw new Error('角色不在该自选范围或没有可用自选包');
   const isNew = !save.owned[characterId];
-  if (isNew) save.owned[characterId] = { level: 1, breakthrough: 0, dupes: 0, investedXp: 0, investedCoins: 0 };
+  const acquiredRarity = entitlement.version === 'legacy-ssr-v1' ? 'SSR' : currentRarity(character);
+  if (isNew) save.owned[characterId] = { level: 1, breakthrough: 0, dupes: 0, investedXp: 0, investedCoins: 0, acquiredRarity };
   else save.owned[characterId].dupes += 1;
   discoverCharacter(save, characterId, isNew);
 }
@@ -936,10 +941,12 @@ export function viewCollectionEntry(save, characterId, content) {
   return { characterId };
 }
 
-export function buySelector(save, kind) {
+export function buySelector(save, kind, content) {
+  ensureCatalogState(save, content);
   const cost = kind === 'common' ? 500 : 1000;
+  if (!['common', 'past'].includes(kind)) throw new Error('未知自选包类型');
   if (save.currencies.contractShards < cost) throw new Error('契约碎片不足');
-  save.currencies.contractShards -= cost; save.gacha.selectors[kind] += 1;
+  save.currencies.contractShards -= cost; addSelectorEntitlement(save, content, kind);
 }
 
 export function validateImportedSave(save, content) {
@@ -954,6 +961,7 @@ export function validateImportedSave(save, content) {
   validateEquipmentRelations(save);
   save.transactions ||= {};
   ensureRepeatState(save);
+  ensureCatalogState(save, content);
   save.gacha.lastBatchId ||= null;
   if (save.battle?.players) {
     for (const unit of save.battle.players) {

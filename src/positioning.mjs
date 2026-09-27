@@ -15,7 +15,7 @@ const POSITION_GROUPS = [
 const positions = new Map(POSITION_GROUPS.flatMap(group => group.ids.map(id => [id, { recommendedRow: group.row, combatStyle: group.style }])));
 
 export function withPositioning(character) {
-  if (character.rarity !== 'SSR') return character;
+  if (character.rarity !== 'SSR' && character.baseRarity !== 'SSR') return character;
   const position = positions.get(character.id);
   if (!position) throw new Error(`SSR 缺少独立站位设定：${character.id}`);
   return { ...character, ...position };

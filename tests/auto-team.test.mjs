@@ -17,7 +17,7 @@ test('auto team prioritizes rarity then level then breakthrough and uses three p
   owned.C18.level = 3; owned.C05.level = 2; owned.C20.breakthrough = 2; owned.L01.level = 100;
   const before = structuredClone(owned);
   const result = buildAutoTeam(content.characters, owned);
-  assert.deepEqual(result.party, ['C18','C05','C20','C02','C04']);
+  assert.deepEqual(result.party, ['C18','C20','C02','C04','C21']);
   check(result); assert.deepEqual(owned, before);
   assert.ok(result.formation.indexOf('C18') < 3);
   assert.ok(result.formation.indexOf('C20') >= 6);

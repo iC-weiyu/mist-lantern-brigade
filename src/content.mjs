@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { STARTER_PROFILES } from './starter-profiles.mjs';
 import { withPositioning } from './positioning.mjs';
+import { applyCharacterCatalog } from './character-state.mjs';
 
 const TEMPLATE_STATS = {
   A: { hp: 1000, attack: 120, defense: 60, role: '单体输出' },
@@ -186,7 +187,7 @@ export function loadContent(rootDir) {
   const namingDoc = fs.readFileSync(path.join(rootDir, '规划补充', 'SSR命名与人物记忆点_v0.2.md'), 'utf8');
   const baseLow = parseLow(roleDoc);
   const ssrProfiles = parseSsrProfiles(namingDoc);
-  const characters = applyCardSummaries(rootDir, [...applySsrProfiles(parseSsr(roleDoc), ssrProfiles), ...baseLow, ...parseLowExpansion(rootDir, baseLow)]).map((character) => {
+  const characters = applyCharacterCatalog(applyCardSummaries(rootDir, [...applySsrProfiles(parseSsr(roleDoc), ssrProfiles), ...baseLow, ...parseLowExpansion(rootDir, baseLow)])).map((character) => {
     const profile = STARTER_PROFILES.find((entry) => entry.id === character.id);
     return withPositioning(profile ? { ...character, ...profile, aliases: [profile.oldName] } : character);
   });
@@ -195,9 +196,9 @@ export function loadContent(rootDir) {
   const ids = characters.map((x) => x.id);
   const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (duplicates.length) throw new Error(`重复角色 ID：${duplicates.join(', ')}`);
-  if (characters.filter((x) => x.rarity === 'SSR').length !== 42) throw new Error('SSR 注册数量必须为 42');
+  if (characters.filter((x) => x.rarity === 'SSR').length !== 34) throw new Error('当前 SSR 注册数量必须为 34（18 开放 + 16 预留）');
   if (characters.filter((x) => x.rarity === 'R').length !== 72) throw new Error('R 注册数量必须为 72');
-  if (characters.filter((x) => x.rarity === 'SR').length !== 48) throw new Error('SR 注册数量必须为 48');
+  if (characters.filter((x) => x.rarity === 'SR').length !== 56) throw new Error('当前 SR 注册数量必须为 56（48 原有 + 8 降级）');
   if (characters.length !== 162) throw new Error('角色注册总数必须为 162');
   if (equipmentSets.length !== 12) throw new Error('装备套装注册数量必须为 12');
   for (const theme of THEMES) for (const id of theme.characterIds) {

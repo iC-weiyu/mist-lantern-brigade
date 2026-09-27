@@ -1,4 +1,5 @@
 import { createSave, TUTORIAL_STAGES } from './engine.mjs';
+import { currentRarity, ensureCatalogState } from './character-state.mjs';
 
 export const TEST_RESOURCES = ['tickets', 'coins', 'xp', 'notes', 'contractShards', 'equipmentDust'];
 export function createTestSave(content) {
@@ -20,11 +21,12 @@ export function setTestResources(save, resources) {
 }
 
 export function grantTestCharacter(save, content, characterId, count) {
+  ensureCatalogState(save, content);
   const character = content.characters.find(entry => entry.id === characterId);
   if (!character) throw new Error('请选择有效角色');
   if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new Error('领取数量须为 1～1000 的整数');
   const isNew = !save.owned[characterId];
-  if (isNew) save.owned[characterId] = { level: 1, breakthrough: 0, dupes: count - 1, investedXp: 0, investedCoins: 0 };
+  if (isNew) save.owned[characterId] = { level: 1, breakthrough: 0, dupes: count - 1, investedXp: 0, investedCoins: 0, acquiredRarity: currentRarity(character) };
   else save.owned[characterId].dupes += count;
   save.collection ||= { discovered: [], new: [] };
   if (!save.collection.discovered.includes(characterId)) save.collection.discovered.push(characterId);

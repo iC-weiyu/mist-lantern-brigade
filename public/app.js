@@ -95,6 +95,22 @@ function esc(value = '') {
 function formatAmount(value) { return Number(value ?? 0).toLocaleString('zh-CN'); }
 function storyText(value = '') { return esc(value).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); }
 function char(id) { return model.content.characters.find((c) => c.id === id); }
+function currentRarityOf(character) { return character?.currentRarity || character?.rarity || 'R'; }
+function displayRarityOf(character, owned = model.save?.owned?.[character?.id]) {
+  return character?.catalogStatus === 'demoted' && owned?.acquiredRarity === 'SSR' ? 'SR · 历史 SSR' : currentRarityOf(character);
+}
+function isCollectionVisible(character) { return character.catalogStatus !== 'reserve' || Boolean(model.save?.owned?.[character.id]); }
+function characterCatalogNote(character, owned = model.save?.owned?.[character?.id]) {
+  if (character.catalogStatus === 'reserve') return owned ? '预留 · 已拥有，保留 SSR 权益' : '预留 · 当前未开放';
+  if (character.catalogStatus === 'demoted') return owned?.acquiredRarity === 'SSR' ? '当前 SR · 历史 SSR 获得权益保留' : '当前 SR · 重复回收 10 契约碎片';
+  return '';
+}
+function selectorChoices(kind) {
+  const current = model.content.characters.filter((c) => c.catalogStatus === 'open' && c.currentRarity === 'SSR' && c.pool === (kind === 'common' ? 'standard' : 'past'));
+  const legacyIds = (model.save.gacha.selectorEntitlements?.[kind] || []).flatMap((entry) => entry.candidateIds || []);
+  const ids = new Set([...current.map((c) => c.id), ...legacyIds]);
+  return model.content.characters.filter((c) => ids.has(c.id));
+}
 function equipmentSet(id) { return model.content.equipmentSets.find((s) => s.id === id); }
 function equipmentSlotName(slot) { return ({ weapon: '武器', armor: '防具', accessory: '饰品', relic: '遗物' }[slot] || slot); }
 function tx() { return crypto.randomUUID(); }
@@ -1096,7 +1112,7 @@ function nav() {
 function topbar() {
   const [title, kicker] = pageTitles[view]; const c = model.save?.currencies;
   return `<header class="topbar"><div><p class="page-kicker">${kicker}</p><h1>${title}</h1></div>${c ? `<div class="resources" aria-label="资源">
-    <span class="resource">招募券 <strong>${formatAmount(c.tickets)}</strong></span><span class="resource">金币 <strong>${formatAmount(c.coins)}</strong></span><span class="resource">经验 <strong>${formatAmount(c.xp)}</strong></span><span class="resource">碎片 <strong>${formatAmount(c.contractShards)}</strong></span>
+    <span class="resource">招募券 <strong>${formatAmount(c.tickets)}</strong></span><span class="resource">金币 <strong>${formatAmount(c.coins)}</strong></span><span class="resource">经验 <strong>${formatAmount(c.xp)}</strong></span><span class="resource">契约碎片 <strong>${formatAmount(c.contractShards)}</strong></span>
   </div>` : '<span class="tag">尚未建立旅程</span>'}</header>`;
 }
 
@@ -1202,7 +1218,7 @@ function battleFormationView(battle) {
 }
 
 function wishSelect(value, index, kind) {
-  const standard = model.content.characters.filter((c) => c.pool === 'standard');
+  const standard = model.content.characters.filter((c) => c.catalogStatus === 'open' && c.currentRarity === 'SSR' && c.pool === 'standard');
   return `<div class="form-row"><label>心愿格 ${index + 1}</label><select data-wish="${index}" data-wish-kind="${kind}"><option value="">随机 · 来者不拒</option>${standard.map((c) => `<option value="${c.id}" ${value === c.id ? 'selected' : ''}>${esc(c.name)} · ${esc(c.title)}</option>`).join('')}</select></div>`;
 }
 
@@ -1221,15 +1237,15 @@ function recruitView() {
       <div>${pool !== 'theme' ? `<div class="wish-grid">${wishes.map((x, i) => wishSelect(x, i, pool)).join('')}</div><button class="btn small ghost" style="margin-top:10px" data-action="save-wishes">保存心愿</button>` : `<article class="card"><h3>SSR 类别开关</h3><label class="fine" style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" data-past-mode ${g.pastMode ? 'checked' : ''}> 启用往期许愿 0/30/70</label><p class="fine">关闭时严格使用 40/30/30；类别内角色等权。此开关不会重置保底。</p></article>`}</div></section>
     ${freeRecruitView()}<section class="section"><div class="section-head"><div><h2>最近招募记录</h2><p>重复卡保留为凭证，不会自动突破。</p></div><div class="character-actions">${pendingReveal ? '<button class="btn small primary" data-gacha-continue>继续揭晓</button>' : ''}<button class="btn small ghost" data-view="roster">去换人上场</button></div></div>${g.lastResults.length ? `<div class="pull-results">${g.lastResults.map((r) => { const c = char(r.characterId); return `<article class="pull-card rarity-${r.rarity.toLowerCase()} ${r.rarity === 'SSR' ? 'ssr' : ''} ${r.isNew ? 'new' : ''}"><span class="tag ${r.rarity === 'SSR' ? 'gold' : ''}">${r.rarity}</span><strong>${esc(c.name)}</strong><small>${r.isNew ? '新伙伴已加入' : '同名凭证 +1'}</small></article>`; }).join('')}</div>` : `<div class="empty-state"><strong>契约册还没有招募记录</strong>第一次招募结果会保存在这里，刷新后不会再次生成结果。</div>`}</section>
     <section class="section grid two"><article class="card"><p class="eyebrow">全池累计招募 ${g.totalPulls} 次</p><h3>常驻自选：每 200 次招募</h3><div class="progress" style="margin-top:12px"><span style="width:${g.totalPulls % 200 / 2}%"></span></div><p class="fine">可用 ${g.selectors.common} 份 · 距下一份 ${200 - g.totalPulls % 200} 次</p></article><article class="card"><p class="eyebrow">独立里程碑</p><h3>往期自选：每 500 次招募</h3><div class="progress herb" style="margin-top:12px"><span style="width:${g.totalPulls % 500 / 5}%"></span></div><p class="fine">可用 ${g.selectors.past} 份 · 距下一份 ${500 - g.totalPulls % 500} 次</p></article></section>
-    <section class="section card"><div class="section-head"><div><h2>契约碎片与自选包</h2><p>SSR 凭证每张回收 100 碎片；常驻 500、往期 1000。购买包后再决定角色。</p></div><span class="tag gold">持有 ${model.save.currencies.contractShards}</span></div><div class="grid two">
-      ${selectorPanel('common', '常驻 SSR', 500, model.content.characters.filter((c) => c.pool === 'standard'))}
-      ${selectorPanel('past', '往期主题 SSR', 1000, model.content.characters.filter((c) => c.pool === 'past'))}
+    <section class="section card"><div class="section-head"><div><h2>契约碎片与自选包</h2><p>角色重复凭证回收统一产出契约碎片：SSR 100、SR 10、R 2。装备粉尘不由角色凭证产生。</p></div><span class="tag gold">持有 ${model.save.currencies.contractShards}</span></div><div class="grid two">
+      ${selectorPanel('common', '常驻 SSR', 500, selectorChoices('common'))}
+      ${selectorPanel('past', '往期主题 SSR', 1000, selectorChoices('past'))}
     </div></section>`;
 }
 
 function selectorPanel(kind, title, cost, candidates) {
   const count = model.save.gacha.selectors[kind];
-  return `<article class="card"><h3>${title}</h3><p class="fine">自选包 ${count} 份 · 碎片价格 ${cost}</p><div class="form-row"><label>选择角色</label><select data-selector-choice="${kind}">${candidates.map((c) => `<option value="${c.id}">${esc(c.name)} · ${esc(c.title)}</option>`).join('')}</select></div><div class="character-actions"><button class="btn small" data-choose-selector="${kind}" ${count < 1 ? 'disabled' : ''}>使用自选包</button><button class="btn small ghost" data-buy-selector="${kind}" ${model.save.currencies.contractShards < cost ? 'disabled' : ''}>${cost} 碎片购买</button></div></article>`;
+  return `<article class="card"><h3>${title}</h3><p class="fine">自选包 ${count} 份 · 契约碎片价格 ${cost}</p><div class="form-row"><label>选择角色</label><select data-selector-choice="${kind}">${candidates.map((c) => `<option value="${c.id}">${esc(c.name)} · ${esc(c.title)}${c.catalogStatus === 'reserve' ? ' · 旧 SSR 权益' : c.catalogStatus === 'demoted' ? ' · 历史 SSR 权益' : ''}</option>`).join('')}</select></div><div class="character-actions"><button class="btn small" data-choose-selector="${kind}" ${count < 1 ? 'disabled' : ''}>使用自选包</button><button class="btn small ghost" data-buy-selector="${kind}" ${model.save.currencies.contractShards < cost ? 'disabled' : ''}>${cost} 契约碎片购买</button></div></article>`;
 }
 
 function rosterView() {
@@ -1239,7 +1255,7 @@ function rosterView() {
   const ownedIds = Object.keys(model.save.owned);
   const owned = model.content.characters.filter((c) => ownedIds.includes(c.id));
   const locked = model.content.characters.filter((c) => !ownedIds.includes(c.id));
-  const optionHtml = owned.map((c) => `<option class="rarity-${c.rarity.toLowerCase()}" value="${c.id}">${c.rarity} · ${esc(c.name)} · ${esc(c.role)}</option>`).join('');
+  const optionHtml = owned.map((c) => `<option class="rarity-${c.rarity.toLowerCase()}" value="${c.id}">${displayRarityOf(c)} · ${esc(c.name)} · ${esc(c.role)}</option>`).join('');
   return `${protagonistCard()}<section class="card"><div class="section-head"><div><h2>五名出战伙伴</h2><p>${esc(heroName())}独立占位，不占伙伴名额。每个伙伴只能上阵一次；保存后下一场战斗生效。</p></div><div class="party-toolbar"><button class="btn ghost small" data-action="auto-party" title="按品质、等级、突破优先选择，前中后排各至少一名伙伴">一键配队</button><button class="btn primary small" data-action="save-party">${dirty ? '保存编队（有变更）' : '保存编队'}</button></div></div>${dirty ? '<p class="party-unsaved" role="status">编队尚未保存 · 下一场仍会使用之前的队伍，请先保存变更。</p>' : ''}<div class="party-editor">${partyDraft.map((id, i) => `<div class="form-row"><label>${i + 1} 号位</label><select aria-label="${i + 1} 号位" class="rarity-${char(id).rarity.toLowerCase()}" data-party-slot="${i}">${optionHtml.replace(`value="${id}"`, `value="${id}" selected`)}</select></div>`).join('')}</div>${formationView()}</section>
     <section class="section"><div class="section-head"><div><h2>已招募 · ${owned.length}</h2><p>升级返还、技能升级与装备预设后续继续完善；当前支持等级、突破和凭证回收。</p></div></div><div class="roster">${owned.map((c) => characterCard(c, true)).join('')}</div></section>
     <section class="section"><details><summary class="btn ghost" style="display:inline-flex;align-items:center;cursor:pointer">查看未招募图鉴 · ${locked.length}</summary><div class="roster" style="margin-top:12px">${locked.map((c) => characterCard(c, false)).join('')}</div></details></section>`;
@@ -1266,7 +1282,8 @@ function characterCard(c, isOwned) {
   const levelPreview = preview ? `<div class="character-step"><span>${preview.nextLevel ? `升至 Lv.${preview.nextLevel.target}` : '等级已满'}</span>${preview.nextLevel ? `${deltaRow(preview.nextLevel.delta)}<div class="character-cost"><strong>消耗</strong><span>经验 ${formatAmount(levelCost.cost.xp)} · 金币 ${formatAmount(levelCost.cost.coins)}</span><div class="character-resource-check">${levelResource('xp', '经验')} ${levelResource('coins', '金币')}</div></div>` : '<strong class="character-cap">已达当前上限 Lv.20</strong>'}</div>` : '';
   const breakthroughPreview = preview ? `<div class="character-step"><span>${preview.nextBreakthrough ? `下一突 · ${preview.nextBreakthrough.target}/7` : '突破已满'}</span>${preview.nextBreakthrough ? `${deltaRow(preview.nextBreakthrough.delta)}<small class="breakthrough-cost">消耗：同名凭证 ×1 · 持有 ${formatAmount(own.dupes)}</small>` : '<strong class="character-cap">已达 7 突</strong>'}${preview.nextBreakthrough?.skillUpgradePending ? `<small>第 ${preview.nextBreakthrough.target} 突专属技能强化尚未实装；当前不会额外改变属性。</small>` : ''}</div>` : '';
   const levelDisabled = !isOwned || own.level >= 20 || (levelCost && !levelCost.canAfford);
-  return `<article class="card character-card rarity-${c.rarity.toLowerCase()} ${isOwned ? '' : 'locked-card'}"><div class="character-head"><div class="avatar">${esc(c.name[0])}</div><div><h3>${esc(c.name)} <span class="tag ${c.rarity === 'SSR' ? 'gold' : ''}">${c.rarity}</span></h3><p class="meta">${esc(c.title)} · ${esc(c.role)}</p></div></div><p class="skill-summary">${esc(c.skillText || c.passiveText)}</p>
+  const rarityLabel = displayRarityOf(c, own); const catalogNote = characterCatalogNote(c, own);
+  return `<article class="card character-card rarity-${c.rarity.toLowerCase()} ${isOwned ? '' : 'locked-card'}"><div class="character-head"><div class="avatar">${esc(c.name[0])}</div><div><h3>${esc(c.name)} <span class="tag ${c.rarity === 'SSR' ? 'gold' : ''}">${rarityLabel}</span></h3><p class="meta">${esc(c.title)} · ${esc(c.role)}</p>${catalogNote ? `<small class="fine">${esc(catalogNote)}</small>` : ''}</div></div><p class="skill-summary">${esc(c.skillText || c.passiveText)}</p>
     ${isOwned ? `<div class="stat-row" style="margin-top:12px"><div class="stat"><span>等级</span><strong>${own.level}</strong></div><div class="stat"><span>突破</span><strong>${own.breakthrough}/7</strong></div><div class="stat"><span>凭证</span><strong>${own.dupes}</strong></div></div>${currentStats}<div class="character-step-preview">${levelPreview}${breakthroughPreview}</div><div class="character-actions"><button class="btn small" data-level="${c.id}" ${levelDisabled ? 'disabled' : ''}>${own.level >= 20 ? '已满级' : `升级至 Lv.${own.level + 1}`}</button><button class="btn small ghost" data-breakthrough="${c.id}" ${own.dupes < 1 || own.breakthrough >= 7 ? 'disabled' : ''}>${own.breakthrough >= 7 ? '已 7 突' : `突破至 ${own.breakthrough + 1}`}</button><button class="btn small ghost" data-recycle="${c.id}" ${own.dupes < 1 ? 'disabled' : ''}>回收 1 张</button></div>` : '<p class="fine">未招募 · 可查看技能，不可上阵</p>'}</article>`;
 }
 
@@ -1275,6 +1292,8 @@ function collectionDiscovery() {
 }
 
 function collectionAcquisition(character) {
+  if (character.catalogStatus === 'reserve') return model.save.owned[character.id] ? '预留 SSR：已拥有者保留显示、养成、出战和旧自选权益' : '预留 SSR：当前从普通卡池、普通心愿、新自选包和普通图鉴隐藏';
+  if (character.catalogStatus === 'demoted') return model.save.owned[character.id]?.acquiredRarity === 'SSR' ? '当前 SR：历史 SSR 获得权益保留；未来重复按 SR 回收 10 契约碎片' : '当前 SR：基础成员池，重复回收 10 契约碎片';
   if (character.pool === 'low') return '基础成员：新手、常驻与主题招募的 R / SR 档';
   if (character.pool === 'standard') return '常驻 SSR：新手、常驻，以及主题招募的常驻分组';
   if (character.pool === 'past') return '往期主题 SSR：主题招募的往期分组，或往期自选包';
@@ -1300,13 +1319,14 @@ function stableCharacterSort(a, b) {
 function collectionView() {
   const discovered = collectionDiscovery();
   const newIds = new Set(model.save.collection?.new || []);
-  const roles = [...new Set(model.content.characters.map((character) => character.role))];
+  const collectionCharacters = model.content.characters.filter(isCollectionVisible);
+  const roles = [...new Set(collectionCharacters.map((character) => character.role))];
   const counts = Object.fromEntries(['SSR', 'SR', 'R'].map((rarity) => [rarity, {
-    found: model.content.characters.filter((character) => character.rarity === rarity && discovered.has(character.id)).length,
-    total: model.content.characters.filter((character) => character.rarity === rarity).length,
+    found: collectionCharacters.filter((character) => character.rarity === rarity && discovered.has(character.id)).length,
+    total: collectionCharacters.filter((character) => character.rarity === rarity).length,
   }]));
   const query = collectionSearch.trim().toLocaleLowerCase('zh-CN');
-  const visible = model.content.characters.filter((character) => {
+  const visible = collectionCharacters.filter((character) => {
     const isOwned = Boolean(model.save.owned[character.id]);
     const searchable = [character.name, character.title, ...(character.aliases || [])].join(' ').toLocaleLowerCase('zh-CN');
     return (!query || searchable.includes(query))
@@ -1319,13 +1339,13 @@ function collectionView() {
     const own = model.save.owned[character.id]; const isFound = discovered.has(character.id);
     return `<button class="collection-card rarity-${character.rarity.toLowerCase()} ${isFound ? 'found' : 'undiscovered'}" data-collection-id="${character.id}" aria-label="查看 ${esc(character.title)} ${esc(character.name)} 图鉴详情">
       <span class="collection-id">${character.id}</span>${newIds.has(character.id) ? '<span class="collection-new">NEW</span>' : ''}
-      <span class="collection-monogram">${esc(character.name[0])}</span><span class="tag ${character.rarity === 'SSR' ? 'gold' : ''}">${character.rarity}</span>
-      <strong class="collection-title">${esc(character.title)}</strong><span class="collection-name">${esc(character.name)}</span><small>${esc(character.role)}${collectionSort === 'spd' ? ` · SPD ${character.speed ?? '—'}` : ''} · ${isFound ? '已点亮' : '未获得'}</small>
+      <span class="collection-monogram">${esc(character.name[0])}</span><span class="tag ${character.rarity === 'SSR' ? 'gold' : ''}">${displayRarityOf(character)}</span>
+      <strong class="collection-title">${esc(character.title)}</strong><span class="collection-name">${esc(character.name)}</span><small>${esc(character.role)}${collectionSort === 'spd' ? ` · SPD ${character.speed ?? '—'}` : ''} · ${isFound ? '已点亮' : '未获得'}${characterCatalogNote(character, own) ? ` · ${esc(characterCatalogNote(character, own))}` : ''}</small>
       ${own ? `<span class="collection-owned">Lv.${own.level} · ${own.breakthrough}突</span>` : '<span class="collection-owned muted">可预览技能与获取途径</span>'}
     </button>`;
   }).join('');
   return `<section class="collection-protagonist card"><div><p class="eyebrow">主角 · 独立档案</p><h2>${esc(model.protagonist.name)}</h2><p>曾经的护送冒险者，如今在雾灯会馆落脚。带领伙伴接委托，在旅途中不断成长。</p><span class="tag">Lv.${model.protagonist.level}</span> <span class="tag">剧情成长 +${model.protagonist.storyBonus}%</span></div><button class="btn primary" data-protagonist-detail>查看主角档案</button></section>
-    <section class="collection-hero"><div><p class="eyebrow">伙伴图鉴 · 不提供战力奖励</p><h2>旅团的每一次相遇，都留在这里。</h2><p>回收多余卡不会抹除点亮记录；未拥有角色也可查看完整技能与实际获取途径。</p></div><div class="collection-total"><strong>${discovered.size}<span> / ${model.content.characters.length}</span></strong><small>已点亮伙伴</small></div></section>
+    <section class="collection-hero"><div><p class="eyebrow">伙伴图鉴 · 不提供战力奖励</p><h2>旅团的每一次相遇，都留在这里。</h2><p>回收多余卡不会抹除点亮记录；预留角色未拥有时隐藏且不计开放收藏分母。</p></div><div class="collection-total"><strong>${collectionCharacters.filter((character) => discovered.has(character.id)).length}<span> / ${collectionCharacters.length}</span></strong><small>开放目录已点亮伙伴</small></div></section>
     <section class="collection-progress">${['SSR', 'SR', 'R'].map((rarity) => `<article><span class="tag ${rarity === 'SSR' ? 'gold' : ''}">${rarity}</span><strong>${counts[rarity].found} / ${counts[rarity].total}</strong><div class="progress"><span style="width:${counts[rarity].found / counts[rarity].total * 100}%"></span></div></article>`).join('')}</section>
     <section class="collection-toolbar card"><div class="collection-search"><input type="text" value="${esc(collectionSearch)}" placeholder="姓名、称号或旧名" aria-label="搜索姓名、称号或旧名" data-collection-search><button class="btn small" data-action="apply-collection-search">搜索</button></div>
       <select aria-label="稀有度筛选" data-collection-rarity><option value="all">全部稀有度</option>${['SSR', 'SR', 'R'].map((value) => `<option value="${value}" ${collectionRarity === value ? 'selected' : ''}>${value}</option>`).join('')}</select>
@@ -1341,12 +1361,12 @@ function collectionView() {
 function renderCollectionDetail() {
   if (!collectionDetailId) return '';
   if (collectionDetailId === 'protagonist') return `<div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="protagonist-detail-title"><section class="protagonist-detail card"><button class="collection-close" data-action="close-collection-detail" aria-label="关闭图鉴详情">×</button><p class="eyebrow">主角 · 独立档案</p><h2 id="protagonist-detail-title">${esc(model.protagonist.name)}</h2><div class="protagonist-biography">${(model.content.prologue.background?.paragraphs || []).slice(0, 3).map(text => `<p>${storyText(text)}</p>`).join('')}</div>${protagonistCard()}<button class="btn primary" data-action="close-collection-detail">返回图鉴 <kbd>空格</kbd></button></section></div>`;
-  const character = char(collectionDetailId); if (!character) return '';
-  const own = model.save.owned[character.id]; const discovered = collectionDiscovery().has(character.id);
+  const character = char(collectionDetailId); if (!character || !isCollectionVisible(character)) return '';
+  const own = model.save.owned[character.id]; const discovered = collectionDiscovery().has(character.id); const rarityLabel = displayRarityOf(character, own); const catalogNote = characterCatalogNote(character, own);
   return `<div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="collection-detail-title"><section class="collection-detail rarity-${character.rarity.toLowerCase()}">
     <button class="collection-close" data-action="close-collection-detail" aria-label="关闭图鉴详情">×</button>
     <div class="collection-detail-art"><span>${esc(character.name[0])}</span><small>${character.id}</small></div>
-    <div class="collection-detail-copy"><p class="eyebrow">${discovered ? '图鉴已点亮' : '尚未获得 · 预览'}</p><p class="collection-detail-title">${esc(character.title)}</p><h2 id="collection-detail-title">${esc(character.name)} <span class="tag ${character.rarity === 'SSR' ? 'gold' : ''}">${character.rarity}</span></h2><p class="meta">${esc(character.role)} · SPD ${character.speed}</p>
+    <div class="collection-detail-copy"><p class="eyebrow">${discovered ? '图鉴已点亮' : '尚未获得 · 预览'}</p><p class="collection-detail-title">${esc(character.title)}</p><h2 id="collection-detail-title">${esc(character.name)} <span class="tag ${character.rarity === 'SSR' ? 'gold' : ''}">${rarityLabel}</span></h2><p class="meta">${esc(character.role)} · SPD ${character.speed}</p>${catalogNote ? `<p class="fine">${esc(catalogNote)}</p>` : ''}
       <div class="collection-base-stats"><span>基础生命 <strong>${character.hp}</strong></span><span>基础攻击 <strong>${character.attack}</strong></span><span>基础防御 <strong>${character.defense}</strong></span></div>
       ${character.memory ? `<article class="character-memory"><h3>人物记忆点</h3><p>${esc(character.memory)}</p></article>` : ''}<article><h3>技能预览</h3><p>${esc(character.skillText || '暂无主动技能说明。')}</p></article><article><h3>被动特性</h3><p>${esc(character.passiveText || '暂无独立被动说明。')}</p></article><article><h3>突破效果</h3><p>${esc(character.breakthroughText || '每次突破提升生命与主职能属性。')}</p></article><article><h3>获取途径</h3><p>${esc(collectionAcquisition(character))}</p></article>
       ${own ? `<div class="collection-current"><span>当前培养状态</span><strong>Lv.${own.level} · ${own.breakthrough}/7 突 · 多余凭证 ${own.dupes}</strong></div><button class="btn primary" data-collection-train="${character.id}">前往角色培养</button>` : '<div class="collection-current locked"><span>持有状态</span><strong>尚未获得</strong></div>'}
@@ -1402,8 +1422,8 @@ function workbenchView() {
   if (model.activeSlotId !== 'test') return '<section class="card"><h2>请先进入测试存档</h2><button class="btn primary" data-view="slots">选择存档</button></section>';
   const resources = [['tickets','招募券'],['coins','金币'],['contractShards','契约碎片'],['xp','经验'],['notes','技能笔记'],['equipmentDust','装备粉尘']];
   const disabled = model.mode !== 'writer';
-  const characters = [...model.content.characters].sort((a,b) => rarityRank(b.rarity)-rarityRank(a.rarity) || a.id.localeCompare(b.id));
-  return `<section class="card"><p class="eyebrow">测试存档专用</p><h2>自由调试会馆</h2><p class="fine">所有改动只写入测试存档。资源填入的是目标总量；直接领取角色不扣券、不计招募次数，也不改变保底。</p><div class="workbench-resources">${resources.map(([key,label]) => `<label>${label}<input type="number" min="0" max="9999999999" step="1" required data-test-resource="${key}" value="${model.save.currencies[key] || 0}" ${disabled ? 'disabled' : ''}></label>`).join('')}</div><button class="btn primary" data-action="test-resources" ${disabled ? 'disabled' : ''}>应用资源数值</button></section><section class="card section"><p class="eyebrow">角色工作台</p><h2>领取指定角色</h2><p class="fine">未拥有时第一张解锁角色，其余转为重复凭证；已拥有时全部转为凭证，可自行突破或回收。</p><div class="workbench-grant"><label>指定角色<select data-test-character>${characters.map(c=>`<option value="${c.id}">${c.rarity} · ${esc(c.name)} · ${esc(c.title)}</option>`).join('')}</select></label><label>领取张数<input type="number" min="1" max="1000" step="1" required value="1" data-test-count></label><button class="btn primary" data-action="test-grant" ${disabled ? 'disabled' : ''}>领取角色</button></div><div class="character-actions"><button class="btn ghost" data-view="roster">查看角色与配队</button><button class="btn ghost" data-view="recruit">前往招募</button></div></section>`;
+  const characters = [...model.content.characters].sort((a, b) => rarityRank(b.rarity) - rarityRank(a.rarity) || a.id.localeCompare(b.id));
+  return `<section class="card"><p class="eyebrow">测试存档专用</p><h2>自由调试会馆</h2><p class="fine">所有改动只写入测试存档。资源填入的是目标总量；直接领取角色不扣券、不计招募次数，也不改变保底。</p><div class="workbench-resources">${resources.map(([key,label]) => `<label>${label}<input type="number" min="0" max="9999999999" step="1" required data-test-resource="${key}" value="${model.save.currencies[key] || 0}" ${disabled ? 'disabled' : ''}></label>`).join('')}</div><button class="btn primary" data-action="test-resources" ${disabled ? 'disabled' : ''}>应用资源数值</button></section><section class="card section"><p class="eyebrow">角色工作台 · 全量目录</p><h2>领取指定角色</h2><p class="fine">保留全量角色用于测试；预留、当前 SR 与历史 SSR 权益会明确标记。角色重复凭证回收为契约碎片（SSR 100 / SR 10 / R 2），不产出装备粉尘。</p><div class="workbench-grant"><label>指定角色<select data-test-character>${characters.map(c=>`<option value="${c.id}">${displayRarityOf(c)} · ${esc(c.name)} · ${esc(c.title)}${c.catalogStatus === 'reserve' ? ' · 预留' : c.catalogStatus === 'demoted' ? ' · 当前 SR' : ''}</option>`).join('')}</select></label><label>领取张数<input type="number" min="1" max="1000" step="1" required value="1" data-test-count></label><button class="btn primary" data-action="test-grant" ${disabled ? 'disabled' : ''}>领取角色</button></div><div class="character-actions"><button class="btn ghost" data-view="roster">查看角色与配队</button><button class="btn ghost" data-view="recruit">前往招募</button></div></section>`;
 }
 
 function countdown(nextRefreshAt) {
@@ -1647,7 +1667,7 @@ function titleView() {
     ${titleAudioButton()}
     <section class="title-stage">
       <header class="title-brand">
-        <p class="eyebrow">Mist Lantern Brigade · v0.2.3</p>
+        <p class="eyebrow">Mist Lantern Brigade · v0.3.0</p>
         <h1>雾灯旅团</h1>
         <p class="title-tagline">夜雨千山，微光烁烁，不问来路，只将那些离散的人，缓缓渡回此间</p>
       </header>
