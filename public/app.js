@@ -1189,7 +1189,7 @@ function battleView() {
     ${!ended ? `<button class="btn small ghost" data-action="${b.status === 'paused' ? 'resume-battle' : 'pause-battle'}">${b.status === 'paused' ? '继续推进' : '立即暂停'}</button>${model.save.repeatSession?.id === b.repeatSessionId && b.status === 'active' ? `<button class="btn small ghost" data-action="battle-stop-after" ${b.stopAfterBattle ? 'disabled' : ''}>${b.stopAfterBattle ? '本场结束后汇总中' : '打完本场并汇总'}</button>` : ''}` : ''}</div></div>
     <div class="battle-strategy-strip"><label class="fine" for="strategy">策略</label><select id="strategy" data-strategy><option value="balanced" ${strategy === 'balanced' ? 'selected' : ''}>均衡：按职责使用技能</option><option value="offense" ${strategy === 'offense' ? 'selected' : ''}>强攻：辅助倾向普攻</option><option value="survive" ${strategy === 'survive' ? 'selected' : ''}>保守：治疗与护盾优先</option></select><label class="fine strip-check"><input type="checkbox" data-auto-repeat ${autoRepeat ? 'checked' : ''} ${!model.save.unlocks.autoRepeat ? 'disabled' : ''}> 在线自动连战${model.save.unlocks.autoRepeat ? '' : '（序章后开放）'}</label><span class="fine">本场已进行 ${b.actionCount} 次行动</span></div>
     ${model.save.repeatSession?.id === b.repeatSessionId && model.save.repeatSession.pauseReason ? `<p class="banner repeat-paused">${esc(model.save.repeatSession.pauseReason)}；不会补算离线时间，请选择继续或查看。</p>` : ''}
-    <div class="units enemies">${b.enemies.map((u) => unitCard(u, u.id === focusId)).join('')}</div><div class="battle-rail">点击敌人可改变下一次自由选敌技能的集火</div>${battleFormationView(b)}
+    ${battleArenaView(b)}
     ${ended ? `<div class="hero-actions">${b.status === 'victory' && canReadNextStoryScene() ? `<button class="btn primary" data-story-begin="${prologueProgress().nextSceneId}">继续序章</button>` : '<button class="btn primary" data-action="leave-battle">查看本轮收获 / 返回关卡</button>'}<button class="btn ghost" data-start-stage="${b.stageId}">再次挑战</button>${b.status === 'victory' && b.reward ? `<span class="tag gold">${b.reward.first ? `首胜 +${b.reward.tickets} 券 · ` : ''}+${b.reward.coins} 金币 · 装备已入库</span>` : ''}${b.status === 'stopped' ? `<span class="tag danger">已停止：${esc(b.stopReason || '未完成')}</span>` : ''}</div>${b.repeatSessionId ? repeatLedgerView(model.save.repeatSession, '本次刷关') : ''}</section>` : ''}</div>`;
 }
 
@@ -1207,14 +1207,37 @@ function repeatLedgerView(session, title) {
   return `<article class="card repeat-ledger"><div class="section-head"><div><p class="eyebrow">${esc(title)}</p><h3>${session.status === 'paused' ? '已暂停' : session.status === 'active' ? '在线进行中' : '已结束'} · ${session.wins} 胜 / ${session.losses} 败</h3></div><span class="tag">${formatAmount(session.onlineMs || 0)} ms 在线推进</span></div><p class="fine">实际到账：金币 +${formatAmount(reward.coins)} · 经验 +${formatAmount(reward.xp)}${reward.tickets ? ` · 招募券 +${formatAmount(reward.tickets)}` : ''}${reward.notes ? ` · 笔记 +${formatAmount(reward.notes)}` : ''}</p><p class="fine">装备 ${drops.length} 件${drops.length ? ` · 传说 ${drops.filter(x => x.rarity === '传说').length} · 史诗 ${drops.filter(x => x.rarity === '史诗').length} · 精良 ${drops.filter(x => x.rarity === '精良').length}` : ''}</p>${session.reason ? `<p class="fine">结束原因：${esc(session.reason)}</p>` : ''}${drops.length ? `<details><summary>查看本轮装备（已到账，不重复领取）</summary><ul class="repeat-equipment-list">${drops.map(item => `<li><span class="tag ${item.rarity === '传说' ? 'gold' : ''}">${esc(item.rarity)}</span> ${esc(item.name)} · ${esc(equipmentSlotName(item.slot))} <small>${esc(item.id)}</small></li>`).join('')}</ul></details>` : ''}</article>`;
 }
 
+const BATTLE_RANKS = [
+  { key: 'front', label: '前排', row: 0 },
+  { key: 'middle', label: '中排', row: 1 },
+  { key: 'back', label: '后排', row: 2 },
+];
+
 function battleFormationView(battle) {
-  if (!battle.formation) return `<div class="units">${battle.players.map(unit => unitCard(unit)).join('')}</div>`;
-  const coverNote = battle.positioning?.version ? '<p class="fine battle-cover-note">前排掩护：敌方普通单体直伤按前/中/后排 60%/25%/15% 选行；前排存活时中排×0.85、后排×0.70，前排倒下后恢复×1.00。全体与穿透/刺杀类标记不适用。</p>' : '';
-  return `<div class="battle-formation"><p class="fine">我方阵型 · 前排朝向敌方 · 站位加成已计入本场属性</p>${coverNote}${['前排','中排','后排'].map((name, row) => `<div class="battle-formation-label">${name}</div><div class="battle-formation-row">${battle.formation.slice(row * 3, row * 3 + 3).map(id => {
-    if (id === 'protagonist') return `<article class="battle-hero-placeholder"><strong>${esc(heroName())}</strong></article>`;
-    const unit = battle.players.find(candidate => candidate.characterId === id);
-    return unit ? unitCard(unit) : '<div class="battle-empty-cell" aria-label="空位"></div>';
-  }).join('')}</div>`).join('')}</div>`;
+  if (!battle.formation) return `<section class="battle-camp player-camp"><header><strong>我方灯阵</strong><span>前排靠近交锋线</span></header><div class="battle-ranks"><div class="battle-rank-column rank-front"><span class="battle-rank-label">前排</span><div class="battle-rank-slots">${battle.players.map(unit => unitCard(unit)).join('')}</div></div></div></section>`;
+  const columns = [...BATTLE_RANKS].reverse().map(({ key, label, row }) => {
+    const slots = battle.formation.slice(row * 3, row * 3 + 3).map(id => {
+      if (id === 'protagonist') return `<article class="battle-hero-placeholder"><strong>${esc(heroName())}</strong></article>`;
+      const unit = battle.players.find(candidate => candidate.characterId === id);
+      return unit ? unitCard(unit) : '<div class="battle-empty-cell" aria-label="空位"></div>';
+    }).join('');
+    return `<div class="battle-rank-column rank-${key}"><span class="battle-rank-label">${label}</span><div class="battle-rank-slots">${slots}</div></div>`;
+  }).join('');
+  return `<section class="battle-camp player-camp" aria-label="我方横向阵型"><header><strong>我方灯阵</strong><span>后排 → 中排 → 前排</span></header><div class="battle-ranks">${columns}</div></section>`;
+}
+
+function enemyFormationView(battle) {
+  const fallbackRanks = battle.enemies.length === 1 ? ['front'] : battle.enemies.length === 2 ? ['front', 'middle'] : ['front', 'middle', 'back'];
+  const columns = BATTLE_RANKS.map(({ key, label }) => {
+    const units = battle.enemies.filter((unit, index) => (unit.formationRank || fallbackRanks[index % fallbackRanks.length]) === key);
+    return `<div class="battle-rank-column rank-${key}"><span class="battle-rank-label">${label}</span><div class="battle-rank-slots">${units.length ? units.map(unit => unitCard(unit, unit.id === focusId)).join('') : '<div class="battle-empty-cell" aria-label="敌方空位"></div>'}</div></div>`;
+  }).join('');
+  return `<section class="battle-camp enemy-camp" aria-label="敌方横向阵型"><header><strong>敌方雾阵</strong><span>前排 → 中排 → 后排</span></header><div class="battle-ranks">${columns}</div></section>`;
+}
+
+function battleArenaView(battle) {
+  const coverNote = battle.positioning?.version ? '<p class="fine battle-cover-note">我方前排承担主要火力；前排存活时，中排承伤 ×0.85、后排 ×0.70。全体与穿透攻击无视掩护。</p>' : '';
+  return `${coverNote}<div class="battle-arena">${battleFormationView(battle)}<div class="battle-clash" aria-hidden="true"><span>交锋线</span><i></i></div>${enemyFormationView(battle)}</div><div class="battle-rail">点击敌人可改变下一次自由选敌技能的集火</div>`;
 }
 
 function wishSelect(value, index, kind) {
@@ -1228,8 +1251,8 @@ function recruitView() {
   const pendingReveal = pendingGachaResults();
   const info = {
     beginner: ['新手招募', '基础 SSR 10% · 最多 40 次 · 三个 30% 心愿格', `剩余 ${40 - g.beginnerPulls} 次招募`],
-    common: ['雾港常驻', '基础 SSR 5% · 三个 10% 心愿格 · 与主题共享软保底', `保底计数 ${g.regularPity}`],
-    theme: ['雨灯归途', g.pastMode ? '往期许愿：0% 当期 / 30% 常驻 / 70% 往期' : '默认：40% 当期 / 30% 常驻 / 30% 往期', `保底计数 ${g.regularPity}`],
+    common: ['雾港常驻', '基础 SSR 5% · 三个 10% 心愿格 · 独立软保底，不与主题互通', `常驻保底计数 ${g.commonPity ?? 0}`],
+    theme: ['雨灯归途', `${g.pastMode ? '往期许愿：0% 当期 / 30% 常驻 / 70% 往期' : '默认：40% 当期 / 30% 常驻 / 30% 往期'} · 独立软保底`, `主题保底计数 ${g.themePity ?? 0}`],
   }[pool];
   const wishes = pool === 'beginner' ? g.beginnerWishes : g.commonWishes;
   return `<div class="battle-controls" style="margin-bottom:12px"><button class="btn small ${pool === 'beginner' ? 'selected' : 'ghost'}" data-pool="beginner" ${g.beginnerPulls >= 40 ? 'disabled' : ''}>新手 ${g.beginnerPulls}/40</button><button class="btn small ${pool === 'common' ? 'selected' : 'ghost'}" data-pool="common">常驻</button><button class="btn small ${pool === 'theme' ? 'selected' : 'ghost'}" data-pool="theme" ${!model.save.unlocks.themePool ? 'disabled' : ''}>主题${model.save.unlocks.themePool ? '' : ' · 未开放'}</button></div>
@@ -1667,7 +1690,7 @@ function titleView() {
     ${titleAudioButton()}
     <section class="title-stage">
       <header class="title-brand">
-        <p class="eyebrow">Mist Lantern Brigade · v0.3.0</p>
+        <p class="eyebrow">Mist Lantern Brigade · v0.3.1</p>
         <h1>雾灯旅团</h1>
         <p class="title-tagline">夜雨千山，微光烁烁，不问来路，只将那些离散的人，缓缓渡回此间</p>
       </header>

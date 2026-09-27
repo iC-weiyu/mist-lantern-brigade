@@ -29,6 +29,55 @@ test('content registry contains the complete first-version roster', () => {
   assert.equal(content.equipmentSets.length, 12);
 });
 
+test('common and theme pools keep independent SSR and SR pity counters', () => {
+  const save = createSave(content);
+  save.unlocks.themePool = true;
+  save.gacha.commonPity = 39;
+  save.gacha.themePity = 7;
+  save.gacha.commonSrPity = 4;
+  save.gacha.themeSrPity = 8;
+  const common = performGacha(save, content, 'common', 1);
+  assert.equal(common[0].rarity, 'SSR');
+  assert.equal(save.gacha.commonPity, 0);
+  assert.equal(save.gacha.commonSrPity, 0);
+  assert.equal(save.gacha.themePity, 7);
+  assert.equal(save.gacha.themeSrPity, 8);
+  save.gacha.themePity = 39;
+  const theme = performGacha(save, content, 'theme', 1);
+  assert.equal(theme[0].rarity, 'SSR');
+  assert.equal(save.gacha.themePity, 0);
+  assert.equal(save.gacha.commonPity, 0);
+});
+
+test('legacy shared pity is preserved once into both independent pools', () => {
+  const save = createSave(content);
+  delete save.gacha.commonPity;
+  delete save.gacha.themePity;
+  delete save.gacha.commonSrPity;
+  delete save.gacha.themeSrPity;
+  delete save.gacha.beginnerSrPity;
+  save.gacha.regularPity = 23;
+  save.gacha.srPity = 6;
+  validateImportedSave(save, content);
+  assert.equal(save.gacha.commonPity, 23);
+  assert.equal(save.gacha.themePity, 23);
+  assert.equal(save.gacha.commonSrPity, 6);
+  assert.equal(save.gacha.themeSrPity, 6);
+  assert.equal(save.gacha.beginnerSrPity, 6);
+  assert.equal(save.gacha.pityVersion, 'split-v1');
+  assert.equal('regularPity' in save.gacha, false);
+  assert.equal('srPity' in save.gacha, false);
+});
+
+test('three-enemy stages occupy front, middle, and back ranks', () => {
+  const save = createSave(content);
+  save.story.prologue.status = 'legacy';
+  save.story.clearedStages = ['prologue_1'];
+  const battle = startBattle(save, content, 'prologue_2');
+  assert.deepEqual(battle.enemies.map((enemy) => enemy.formationRank), ['front', 'middle', 'back']);
+  assert.deepEqual(battle.enemies.map((enemy) => enemy.formationRow), ['前排', '中排', '后排']);
+});
+
 test('SSR display names, aliases, memory notes, and card summaries are applied by stable ID', () => {
   const ssr = content.characters.filter((character) => character.baseRarity === 'SSR');
   assert.equal(ssr.filter((character) => character.oldName !== character.name).length, 38);

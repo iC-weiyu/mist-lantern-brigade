@@ -16,6 +16,8 @@ export const COVER_RULES = Object.freeze({
   appliesTo: 'enemy-ordinary-single-direct',
   bypassTags: Object.freeze(['bypassCover', 'piercing']),
 });
+const PITY_POOLS = Object.freeze(['beginner', 'common', 'theme']);
+const ENEMY_RANKS = Object.freeze(['front', 'middle', 'back']);
 export const TUTORIAL_STAGES = [
   { id: 'prologue_1', name: '没有灯的路口', enemyNames: ['雾鬃兽', '雾鬃兽'], level: 1, ticketReward: 10 },
   { id: 'prologue_2', name: '伞下的药箱', enemyNames: ['雾鬃兽', '雾兽头领', '雾鬃兽'], level: 2, ticketReward: 10 },
@@ -121,7 +123,8 @@ export function createSave(content) {
     formation: ['L01', null, null, 'L04', 'protagonist', 'L05', 'L02', 'L03', null],
     collection: { discovered: [...starterIds], new: [...starterIds] },
     gacha: {
-      totalPulls: 0, regularPity: 0, beginnerPity: 0, srPity: 0, beginnerPulls: 0,
+      totalPulls: 0, beginnerPity: 0, commonPity: 0, themePity: 0,
+      beginnerSrPity: 0, commonSrPity: 0, themeSrPity: 0, pityVersion: 'split-v1', beginnerPulls: 0,
       commonWishes: ['', '', ''], beginnerWishes: ['', '', ''], pastMode: false,
       selectors: { common: 0, past: 0 }, selectorEntitlements: { common: [], past: [] }, lastResults: [], lastBatchId: null,
     },
@@ -293,6 +296,24 @@ export function pityRate(counter, base) {
   return Math.min(1, (counter - 29) * 0.1);
 }
 
+export function ensureSplitPity(save) {
+  save.gacha ||= {};
+  const gacha = save.gacha;
+  const legacySsr = Math.max(0, Number.isFinite(Number(gacha.regularPity)) ? Math.floor(Number(gacha.regularPity)) : 0);
+  const legacySr = Math.max(0, Number.isFinite(Number(gacha.srPity)) ? Math.floor(Number(gacha.srPity)) : 0);
+  for (const pool of PITY_POOLS) {
+    const ssrKey = `${pool}Pity`;
+    const srKey = `${pool}SrPity`;
+    const ssrFallback = pool === 'beginner' ? Math.max(0, Number(gacha.beginnerPity) || 0) : legacySsr;
+    gacha[ssrKey] = Number.isFinite(Number(gacha[ssrKey])) ? Math.max(0, Math.floor(Number(gacha[ssrKey]))) : ssrFallback;
+    gacha[srKey] = Number.isFinite(Number(gacha[srKey])) ? Math.max(0, Math.floor(Number(gacha[srKey]))) : legacySr;
+  }
+  delete gacha.regularPity;
+  delete gacha.srPity;
+  gacha.pityVersion = 'split-v1';
+  return gacha;
+}
+
 function wishPick(save, wishes, share, candidates) {
   const roll = randomFloat(save);
   let cursor = 0;
@@ -321,6 +342,7 @@ function ssrForPool(save, content, pool) {
 
 export function performGacha(save, content, pool, requestedCount, { free = false } = {}) {
   ensureCollection(save);
+  ensureSplitPity(save);
   if (!['common', 'beginner', 'theme'].includes(pool)) throw new Error('未知招募池');
   if (pool === 'theme' && !save.unlocks.themePool) throw new Error('雨灯归途主题池需完成序章后开放');
   if (!Number.isInteger(requestedCount) || requestedCount < 1) throw new Error('招募数量须为正整数');
@@ -331,20 +353,21 @@ export function performGacha(save, content, pool, requestedCount, { free = false
   const r = currentLowCandidates(content, 'R');
   const results = [];
   for (let i = 0; i < count; i++) {
-    const pityKey = pool === 'beginner' ? 'beginnerPity' : 'regularPity';
+    const pityKey = `${pool}Pity`;
+    const srPityKey = `${pool}SrPity`;
     const base = pool === 'beginner' ? 0.1 : 0.05;
     const ssr = randomFloat(save) < pityRate(save.gacha[pityKey], base);
     let rarity; let characterId;
     if (ssr) {
-      rarity = 'SSR'; characterId = ssrForPool(save, content, pool); save.gacha[pityKey] = 0; save.gacha.srPity = 0;
+      rarity = 'SSR'; characterId = ssrForPool(save, content, pool); save.gacha[pityKey] = 0; save.gacha[srPityKey] = 0;
     } else {
       save.gacha[pityKey] += 1;
-      const guaranteedSr = save.gacha.srPity >= 9;
+      const guaranteedSr = save.gacha[srPityKey] >= 9;
       const srChance = Math.min(0.15, 1 - pityRate(save.gacha[pityKey] - 1, base));
       if (guaranteedSr || randomFloat(save) < srChance) {
-        rarity = 'SR'; characterId = pick(sr, save); save.gacha.srPity = 0;
+        rarity = 'SR'; characterId = pick(sr, save); save.gacha[srPityKey] = 0;
       } else {
-        rarity = 'R'; characterId = pick(r, save); save.gacha.srPity += 1;
+        rarity = 'R'; characterId = pick(r, save); save.gacha[srPityKey] += 1;
       }
     }
     const isNew = !save.owned[characterId];
@@ -527,11 +550,12 @@ function unitFromCharacter(character, owned, team, position, equipmentItems = []
   };
 }
 
-function enemyUnit(name, level, position, healthScale = 1) {
+function enemyUnit(name, level, position, healthScale = 1, formationRank = 'front') {
   const boss = name.includes('头领') || name.includes('傀儡');
   const hp = Math.round((boss ? 1450 : 760) * (1 + level * 0.18) * healthScale);
   return {
     id: `enemy_${position}`, characterId: `enemy_${position}`, name, team: 'enemy', position,
+    formationRank, formationRow: { front: '前排', middle: '中排', back: '后排' }[formationRank],
     template: boss ? 'T' : 'A', role: boss ? '首领' : '敌人', maxHp: hp, hp,
     attack: Math.round((boss ? 92 : 70) * (1 + level * 0.12)), defense: Math.round((boss ? 72 : 48) * (1 + level * 0.08)),
     speed: boss ? 970 : 990 + position * 5, gauge: 0, energy: 30, cooldown: 0, shield: 0, dots: [], attackBuff: 0,
@@ -567,7 +591,8 @@ export function startBattle(save, content, stageId, { repeat = false, repeatSess
     return applyFormationBonus(unitFromCharacter(content.characters.find((c) => c.id === id), save.owned[id], 'player', i + 1, items), formation.indexOf(id));
   });
   const healthScale = stageId === 'prologue_1' ? 0.55 : stageId.startsWith('prologue_') ? 0.7 : 1;
-  const enemies = stage.enemyNames.map((name, i) => enemyUnit(name, stage.level, i + 1, healthScale));
+  const enemyRanks = stage.enemyNames.length === 1 ? ['front'] : stage.enemyNames.length === 2 ? ['front', 'middle'] : ENEMY_RANKS;
+  const enemies = stage.enemyNames.map((name, i) => enemyUnit(name, stage.level, i + 1, healthScale, enemyRanks[i % enemyRanks.length]));
   save.battle = {
     id: crypto.randomUUID(), stageId, stageName: stage.name, seed: save.rngState, status: 'active', actionCount: 0,
     balance: { ...BATTLE_BALANCE },
@@ -962,6 +987,7 @@ export function validateImportedSave(save, content) {
   save.transactions ||= {};
   ensureRepeatState(save);
   ensureCatalogState(save, content);
+  ensureSplitPity(save);
   save.gacha.lastBatchId ||= null;
   if (save.battle?.players) {
     for (const unit of save.battle.players) {

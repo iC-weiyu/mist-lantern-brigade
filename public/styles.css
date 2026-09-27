@@ -1175,7 +1175,13 @@ body.hall .delete-save-dialog, body.hall .collection-detail { box-shadow: 0 30px
    顶栏只横跨中间的战斗区。记录框自己内部滚动。
    字号与图形尺寸全部按窗口高度 clamp：窗口越高内容越大、尽量把屏幕铺满；
    三排阵型用 flex 吃掉剩余高度，所以放大之后依然不会出现纵向滚动。 */
-.app-shell.battle-shell { grid-template-columns: 232px minmax(0, 1fr) minmax(300px, 380px); height: 100dvh; }
+.app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) minmax(250px, 300px); height: 100dvh; }
+.app-shell.battle-shell .sidebar { padding: 20px 10px; }
+.app-shell.battle-shell .brand { padding-inline: 10px; justify-content: center; }
+.app-shell.battle-shell .brand > div:not(.seal),
+.app-shell.battle-shell .nav-link span:not(.nav-icon),
+.app-shell.battle-shell .sidebar-bottom { display: none; }
+.app-shell.battle-shell .nav-link { justify-content: center; padding: 0; }
 body:has(.battle-layout) .main { height: 100dvh; min-width: 0; display: flex; flex-direction: column; }
 body:has(.battle-layout) .topbar { min-height: clamp(56px, 6.6vh, 76px); padding: clamp(6px, 1vh, 14px) clamp(16px, 1.6vw, 28px); }
 body:has(.battle-layout) .topbar h1 { font-size: clamp(18px, 2.1vh, 27px); }
@@ -1262,9 +1268,9 @@ body:has(.battle-layout) .log li { padding: clamp(5px, .7vh, 10px) 0; font-size:
   body:has(.battle-layout) .battlefield .unit .role { display: none; }
   body:has(.battle-layout) .battle-head h2 { font-size: 16px; }
 }
-@media (max-width: 1180px) { .app-shell.battle-shell { grid-template-columns: 232px minmax(0, 1fr) 280px; } }
-@media (max-width: 980px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 250px; } }
-@media (max-width: 860px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 220px; } }
+@media (max-width: 1180px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 240px; } }
+@media (max-width: 980px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 220px; } }
+@media (max-width: 860px) { .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr) 200px; } }
 /* 窗口再窄就不硬塞三列了：记录落到战斗区下面，恢复正常滚动 */
 @media (max-width: 720px) {
   .app-shell.battle-shell { grid-template-columns: 76px minmax(0, 1fr); height: auto; }
@@ -1272,4 +1278,76 @@ body:has(.battle-layout) .log li { padding: clamp(5px, .7vh, 10px) 0; font-size:
   body:has(.battle-layout) .page { overflow: visible; }
   .app-shell.battle-shell .battle-side { height: auto; border-left: 0; border-top: 1px solid var(--border); }
   .app-shell.battle-shell .log { height: 240px; }
+}
+
+/* ── 横向纵深战场：我方后→中→前 | 交锋线 | 敌方前→中→后 ── */
+body:has(.battle-layout) .battle-cover-note {
+  flex: 0 0 auto; margin: 0 0 clamp(6px, .8vh, 10px); border-left-width: 2px;
+}
+body:has(.battle-layout) .battle-arena {
+  --arena-gap: clamp(6px, .65vw, 12px);
+  flex: 1 1 auto; min-width: 0; min-height: 330px; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr); gap: var(--arena-gap);
+  padding: clamp(8px, 1vh, 14px); border-radius: var(--r-lg);
+  background:
+    linear-gradient(90deg, rgba(111, 192, 161, .055), transparent 44%, transparent 56%, rgba(201, 91, 80, .045)),
+    rgba(5, 9, 11, .34);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
+}
+.battle-camp { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.battle-camp > header {
+  flex: 0 0 auto; min-height: 28px; padding: 0 4px clamp(5px, .6vh, 9px);
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.battle-camp > header strong { color: var(--mist-100); font-size: clamp(12px, 1.35vh, 16px); }
+.battle-camp > header span { color: var(--mist-500); font-size: clamp(9px, 1vh, 12px); }
+.battle-ranks { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--arena-gap); }
+.battle-rank-column {
+  min-width: 0; min-height: 0; padding: clamp(5px, .6vh, 9px);
+  display: flex; flex-direction: column; border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .025); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .045);
+}
+.battle-rank-column.rank-front { background: rgba(226, 180, 103, .055); box-shadow: inset 0 0 0 1px rgba(226, 180, 103, .13); }
+.battle-rank-column.rank-back { background: rgba(111, 192, 161, .025); }
+.battle-rank-label {
+  flex: 0 0 auto; margin-bottom: clamp(4px, .5vh, 7px); color: var(--mist-500);
+  font-size: clamp(9px, 1.05vh, 12px); font-weight: 700; letter-spacing: .08em; text-align: center;
+}
+.rank-front .battle-rank-label { color: var(--lantern); }
+.battle-rank-slots { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: clamp(4px, .55vh, 8px); }
+.enemy-camp .battle-rank-slots { display: flex; flex-direction: column; justify-content: center; }
+body:has(.battle-layout) .battle-arena .unit,
+body:has(.battle-layout) .battle-arena .battle-hero-placeholder,
+body:has(.battle-layout) .battle-arena .battle-empty-cell {
+  min-width: 0; min-height: clamp(66px, 9vh, 112px); height: 100%;
+}
+body:has(.battle-layout) .battle-arena .unit { padding: clamp(5px, .7vh, 9px) clamp(6px, .6vw, 10px); }
+body:has(.battle-layout) .battle-arena .unit h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:has(.battle-layout) .battle-arena .unit .role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:has(.battle-layout) .battle-arena .unit-numbers { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.battle-arena .battle-empty-cell { opacity: .38; background: rgba(255, 255, 255, .015); }
+.enemy-camp .battle-rank-slots .unit,
+.enemy-camp .battle-rank-slots .battle-empty-cell { height: auto; }
+.battle-clash { position: relative; min-height: 0; display: grid; place-items: center; }
+.battle-clash::before {
+  content: ""; position: absolute; top: 34px; bottom: 12px; left: 50%; width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(226, 180, 103, .52) 16%, rgba(226, 180, 103, .18) 84%, transparent);
+  box-shadow: 0 0 16px rgba(226, 180, 103, .18);
+}
+.battle-clash span {
+  position: relative; z-index: 1; padding: 7px 3px; color: var(--lantern); background: #12191c;
+  font-size: 9px; font-weight: 700; letter-spacing: .14em; line-height: 1.2; text-align: center; writing-mode: vertical-rl;
+}
+.battle-clash i { position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; transform: translate(-50%, -50%) rotate(45deg); background: var(--lantern); box-shadow: 0 0 12px rgba(226, 180, 103, .46); }
+body:has(.battle-layout) .battle-rail { flex: 0 0 auto; margin-bottom: 0; }
+
+@media (max-height: 700px) {
+  body:has(.battle-layout) .battle-arena { min-height: 286px; }
+  body:has(.battle-layout) .battle-arena .unit,
+  body:has(.battle-layout) .battle-arena .battle-hero-placeholder,
+  body:has(.battle-layout) .battle-arena .battle-empty-cell { min-height: 60px; }
+}
+@media (max-width: 980px) {
+  body:has(.battle-layout) .battlefield { overflow-x: auto; }
+  body:has(.battle-layout) .battle-arena { min-width: 720px; }
 }
