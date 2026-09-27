@@ -17,7 +17,7 @@ export function playBattleEffects(root, battle, previous, speed = 1, reducedMoti
   if (!field) return;
   // 不在这里清掉上一轮特效：每次行动间隔只有 660ms，清掉会让特效被硬切断、看不清。
   // 特效节点各自在动画播完后自己移除（见 retire），离开战斗页时再由 clearBattleEffects 统一收尾。
-  const duration = 600 / Math.max(1, Math.min(5, speed));
+  const duration = 600 / Math.max(1, Math.min(10, speed));
   const units = new Map([...root.querySelectorAll('[data-unit-id]')].map(node => [node.dataset.unitId, node]));
   const actor = units.get(event.actorId);
   const box = field.getBoundingClientRect();

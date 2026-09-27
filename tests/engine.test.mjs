@@ -69,13 +69,21 @@ test('legacy shared pity is preserved once into both independent pools', () => {
   assert.equal('srPity' in save.gacha, false);
 });
 
-test('three-enemy stages occupy front, middle, and back ranks', () => {
-  const save = createSave(content);
-  save.story.prologue.status = 'legacy';
-  save.story.clearedStages = ['prologue_1'];
-  const battle = startBattle(save, content, 'prologue_2');
-  assert.deepEqual(battle.enemies.map((enemy) => enemy.formationRank), ['front', 'middle', 'back']);
-  assert.deepEqual(battle.enemies.map((enemy) => enemy.formationRow), ['前排', '中排', '后排']);
+test('enemy stages use unique cells in a nine-slot formation and grow to a full squad', () => {
+  const expectedCounts = { prologue_1: 4, prologue_2: 6, prologue_3: 7, old_road_1: 9 };
+  for (const [stageId, expectedCount] of Object.entries(expectedCounts)) {
+    const save = createSave(content);
+    save.story.prologue.status = 'legacy';
+    save.story.clearedStages = ['prologue_1', 'prologue_2', 'prologue_3'];
+    const battle = startBattle(save, content, stageId);
+    assert.equal(battle.enemies.length, expectedCount);
+    assert.equal(new Set(battle.enemies.map((enemy) => enemy.formationCell)).size, expectedCount);
+    for (const enemy of battle.enemies) {
+      assert.ok(enemy.formationCell >= 0 && enemy.formationCell < 9);
+      assert.equal(enemy.formationRank, ['front', 'middle', 'back'][Math.floor(enemy.formationCell / 3)]);
+      assert.equal(enemy.formationRow, { front: '前排', middle: '中排', back: '后排' }[enemy.formationRank]);
+    }
+  }
 });
 
 test('SSR display names, aliases, memory notes, and card summaries are applied by stable ID', () => {

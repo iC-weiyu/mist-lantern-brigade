@@ -10,7 +10,7 @@ let model = null;
 let view = 'home';
 let pool = 'beginner';
 let speed = Number(sessionStorage.getItem('mist-speed') || 1);
-if (![1, 2, 5].includes(speed)) speed = 1;
+if (![1, 2, 5, 10].includes(speed)) speed = 1;
 let focusId = null;
 let strategy = 'balanced';
 let storyPage = 0;
@@ -1179,13 +1179,13 @@ function battleView() {
       const storyLocked = requiredScene && !['legacy', 'completed'].includes(progress.status) && !progress.completedScenes?.includes(requiredScene);
       const locked = Boolean(previous && !model.save.story.clearedStages.includes(previous.id)) || storyLocked;
       const lockedLabel = storyLocked ? '先继续序章剧情' : '完成前一地点后开放';
-    return `<article class="card"><span class="tag ${model.save.story.clearedStages.includes(s.id) ? 'green' : ''}">${model.save.story.clearedStages.includes(s.id) ? '已首胜 · 可 5×' : '未首胜 · 最高 2×'}</span><h3 style="margin-top:14px">${esc(s.name)}</h3><p class="meta">敌方 ${s.enemyNames.length} 人 · 首胜招募券 ${s.ticketReward}</p><div class="character-actions"><button class="btn primary small" data-start-stage="${s.id}" ${locked ? 'disabled' : ''}>${locked ? lockedLabel : '开始战斗'}</button></div></article>`;
+    return `<article class="card"><span class="tag ${model.save.story.clearedStages.includes(s.id) ? 'green' : ''}">${model.save.story.clearedStages.includes(s.id) ? '已首胜 · 可 10×' : '未首胜 · 最高 2×'}</span><h3 style="margin-top:14px">${esc(s.name)}</h3><p class="meta">敌方 ${s.enemyNames.length} 人 · 九槽雾阵 · 首胜招募券 ${s.ticketReward}</p><div class="character-actions"><button class="btn primary small" data-start-stage="${s.id}" ${locked ? 'disabled' : ''}>${locked ? lockedLabel : '开始战斗'}</button></div></article>`;
     }).join('')}</div>`;
   }
   focusId ||= b.focusId; strategy = b.strategy || strategy;
   const ended = ['victory', 'defeat', 'stopped'].includes(b.status);
   return `<div class="battle-layout"><section class="battlefield"><div class="battle-head"><div><p class="eyebrow">${esc(b.stageName)}</p><h2>${b.status === 'victory' ? '战斗胜利' : b.status === 'defeat' ? '战斗失败' : b.status === 'stopped' ? '刷关已停止' : b.status === 'paused' ? '战斗已暂停' : '行动条正在推进'}</h2></div><div class="battle-controls">
-    ${[1,2].map((x) => `<button class="btn small ${speed === x ? 'selected' : 'ghost'}" data-speed="${x}">${x}×</button>`).join('')}<button class="btn small ${speed === 5 ? 'selected' : 'ghost'}" data-speed="5" ${!model.save.story.clearedStages.includes(b.stageId) ? 'disabled title="完成本关首胜后开放 5×"' : ''}>5×${!model.save.story.clearedStages.includes(b.stageId) ? ' · 首胜后开放' : ''}</button>
+    ${[1, 2, 5, 10].map((x) => { const locked = x >= 5 && !model.save.story.clearedStages.includes(b.stageId); return `<button class="btn small ${speed === x ? 'selected' : 'ghost'}" data-speed="${x}" ${locked ? `disabled title="完成本关首胜后开放 ${x}×"` : ''}>${x}×</button>`; }).join('')}
     ${!ended ? `<button class="btn small ghost" data-action="${b.status === 'paused' ? 'resume-battle' : 'pause-battle'}">${b.status === 'paused' ? '继续推进' : '立即暂停'}</button>${model.save.repeatSession?.id === b.repeatSessionId && b.status === 'active' ? `<button class="btn small ghost" data-action="battle-stop-after" ${b.stopAfterBattle ? 'disabled' : ''}>${b.stopAfterBattle ? '本场结束后汇总中' : '打完本场并汇总'}</button>` : ''}` : ''}</div></div>
     <div class="battle-strategy-strip"><label class="fine" for="strategy">策略</label><select id="strategy" data-strategy><option value="balanced" ${strategy === 'balanced' ? 'selected' : ''}>均衡：按职责使用技能</option><option value="offense" ${strategy === 'offense' ? 'selected' : ''}>强攻：辅助倾向普攻</option><option value="survive" ${strategy === 'survive' ? 'selected' : ''}>保守：治疗与护盾优先</option></select><label class="fine strip-check"><input type="checkbox" data-auto-repeat ${autoRepeat ? 'checked' : ''} ${!model.save.unlocks.autoRepeat ? 'disabled' : ''}> 在线自动连战${model.save.unlocks.autoRepeat ? '' : '（序章后开放）'}</label><span class="fine">本场已进行 ${b.actionCount} 次行动</span></div>
     ${model.save.repeatSession?.id === b.repeatSessionId && model.save.repeatSession.pauseReason ? `<p class="banner repeat-paused">${esc(model.save.repeatSession.pauseReason)}；不会补算离线时间，请选择继续或查看。</p>` : ''}
@@ -1228,9 +1228,20 @@ function battleFormationView(battle) {
 
 function enemyFormationView(battle) {
   const fallbackRanks = battle.enemies.length === 1 ? ['front'] : battle.enemies.length === 2 ? ['front', 'middle'] : ['front', 'middle', 'back'];
-  const columns = BATTLE_RANKS.map(({ key, label }) => {
-    const units = battle.enemies.filter((unit, index) => (unit.formationRank || fallbackRanks[index % fallbackRanks.length]) === key);
-    return `<div class="battle-rank-column rank-${key}"><span class="battle-rank-label">${label}</span><div class="battle-rank-slots">${units.length ? units.map(unit => unitCard(unit, unit.id === focusId)).join('') : '<div class="battle-empty-cell" aria-label="敌方空位"></div>'}</div></div>`;
+  const occupied = new Map();
+  const legacyCountByRank = { front: 0, middle: 0, back: 0 };
+  battle.enemies.forEach((unit, index) => {
+    const rank = unit.formationRank || fallbackRanks[index % fallbackRanks.length];
+    const row = BATTLE_RANKS.find(candidate => candidate.key === rank)?.row || 0;
+    const fallbackCell = row * 3 + Math.min(2, legacyCountByRank[rank]++);
+    occupied.set(Number.isInteger(unit.formationCell) ? unit.formationCell : fallbackCell, unit);
+  });
+  const columns = BATTLE_RANKS.map(({ key, label, row }) => {
+    const slots = Array.from({ length: 3 }, (_, slot) => {
+      const unit = occupied.get(row * 3 + slot);
+      return unit ? unitCard(unit, unit.id === focusId) : '<div class="battle-empty-cell" aria-label="敌方空位"></div>';
+    }).join('');
+    return `<div class="battle-rank-column rank-${key}"><span class="battle-rank-label">${label}</span><div class="battle-rank-slots">${slots}</div></div>`;
   }).join('');
   return `<section class="battle-camp enemy-camp" aria-label="敌方横向阵型"><header><strong>敌方雾阵</strong><span>前排 → 中排 → 后排</span></header><div class="battle-ranks">${columns}</div></section>`;
 }
@@ -1690,7 +1701,7 @@ function titleView() {
     ${titleAudioButton()}
     <section class="title-stage">
       <header class="title-brand">
-        <p class="eyebrow">Mist Lantern Brigade · v0.3.1</p>
+        <p class="eyebrow">Mist Lantern Brigade · v0.3.2</p>
         <h1>雾灯旅团</h1>
         <p class="title-tagline">夜雨千山，微光烁烁，不问来路，只将那些离散的人，缓缓渡回此间</p>
       </header>
@@ -1853,13 +1864,13 @@ function scheduleBattle() {
   clearTimeout(timer);
   const b = model?.save?.battle;
   if (view !== 'battle' || !b || b.status !== 'active' || pending || model.mode !== 'writer') return;
-  const actionDelay = BATTLE_ACTION_MS / Math.max(1, Math.min(5, speed));
+  const actionDelay = BATTLE_ACTION_MS / Math.max(1, Math.min(10, speed));
   timer = setTimeout(async () => {
     const result = await act('battle_step', { focusId: focusId || b.focusId, strategy }, { quiet: true });
     const current = model.save.battle;
     const session = model.save.repeatSession;
     if (result && current?.status === 'victory' && autoRepeat && model.save.unlocks.autoRepeat && session?.id === current.repeatSessionId && session.status === 'active' && !session.stopAfterBattle) {
-      timer = setTimeout(() => act('battle_start', { stageId: current.stageId, repeat: true, repeatSessionId: session.id }, { quiet: true }), 900 / Math.max(1, Math.min(5, speed)));
+      timer = setTimeout(() => act('battle_start', { stageId: current.stageId, repeat: true, repeatSessionId: session.id }, { quiet: true }), 900 / Math.max(1, Math.min(10, speed)));
     }
   }, actionDelay);
 }
@@ -2036,7 +2047,7 @@ app.addEventListener('click', async (event) => {
   }
   if (target.matches('[data-pool]')) { pool = target.dataset.pool; render(); return; }
   if (target.matches('[data-equipment-slot-filter]')) { equipmentSlotFilter = target.dataset.equipmentSlotFilter; render(); return; }
-  if (target.matches('[data-speed]')) { const nextSpeed = Number(target.dataset.speed); if (nextSpeed === 5 && !model.save.story.clearedStages.includes(model.save.battle?.stageId)) return toast('完成本关首胜后才开放 5×', true); if (![1, 2, 5].includes(nextSpeed)) return; speed = nextSpeed; sessionStorage.setItem('mist-speed', speed); render(); return; }
+  if (target.matches('[data-speed]')) { const nextSpeed = Number(target.dataset.speed); if (nextSpeed >= 5 && !model.save.story.clearedStages.includes(model.save.battle?.stageId)) return toast(`完成本关首胜后才开放 ${nextSpeed}×`, true); if (![1, 2, 5, 10].includes(nextSpeed)) return; speed = nextSpeed; sessionStorage.setItem('mist-speed', speed); render(); return; }
   if (target.matches('[data-focus]')) { focusId = target.dataset.focus; await act('battle_focus', { focusId }, { quiet: true }); return; }
   if (target.matches('[data-start-stage]')) {
     if (model.save.battle?.status === 'active' && target.dataset.startStage === model.save.battle.stageId) { view = 'battle'; render(); return; }

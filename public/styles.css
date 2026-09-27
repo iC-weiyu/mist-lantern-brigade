@@ -1315,7 +1315,6 @@ body:has(.battle-layout) .battle-arena {
 }
 .rank-front .battle-rank-label { color: var(--lantern); }
 .battle-rank-slots { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: clamp(4px, .55vh, 8px); }
-.enemy-camp .battle-rank-slots { display: flex; flex-direction: column; justify-content: center; }
 body:has(.battle-layout) .battle-arena .unit,
 body:has(.battle-layout) .battle-arena .battle-hero-placeholder,
 body:has(.battle-layout) .battle-arena .battle-empty-cell {
@@ -1326,8 +1325,6 @@ body:has(.battle-layout) .battle-arena .unit h3 { overflow: hidden; text-overflo
 body:has(.battle-layout) .battle-arena .unit .role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body:has(.battle-layout) .battle-arena .unit-numbers { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .battle-arena .battle-empty-cell { opacity: .38; background: rgba(255, 255, 255, .015); }
-.enemy-camp .battle-rank-slots .unit,
-.enemy-camp .battle-rank-slots .battle-empty-cell { height: auto; }
 .battle-clash { position: relative; min-height: 0; display: grid; place-items: center; }
 .battle-clash::before {
   content: ""; position: absolute; top: 34px; bottom: 12px; left: 50%; width: 1px;

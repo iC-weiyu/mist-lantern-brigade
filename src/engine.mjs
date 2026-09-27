@@ -19,11 +19,11 @@ export const COVER_RULES = Object.freeze({
 const PITY_POOLS = Object.freeze(['beginner', 'common', 'theme']);
 const ENEMY_RANKS = Object.freeze(['front', 'middle', 'back']);
 export const TUTORIAL_STAGES = [
-  { id: 'prologue_1', name: '没有灯的路口', enemyNames: ['雾鬃兽', '雾鬃兽'], level: 1, ticketReward: 10 },
-  { id: 'prologue_2', name: '伞下的药箱', enemyNames: ['雾鬃兽', '雾兽头领', '雾鬃兽'], level: 2, ticketReward: 10 },
-  { id: 'prologue_3', name: '带他们回去', enemyNames: ['雾兽幼崽', '雾兽头领', '雾兽幼崽'], level: 3, ticketReward: 10 },
-  { id: 'old_road_1', name: '旧驿道巡灯', enemyNames: ['失控灯偶', '守灯傀儡', '失控灯偶'], level: 5, ticketReward: 0 },
-];
+  { id: 'prologue_1', name: '没有灯的路口', enemyFormation: ['雾鬃兽', '雾鬃兽', null, '雾影幼兽', null, '雾影幼兽', null, null, null], combatBudget: 2, level: 1, ticketReward: 10 },
+  { id: 'prologue_2', name: '伞下的药箱', enemyFormation: ['雾鬃兽', '雾兽头领', '雾鬃兽', '雾影幼兽', null, '雾影幼兽', null, '雾影幼兽', null], combatBudget: 3, level: 2, ticketReward: 10 },
+  { id: 'prologue_3', name: '带他们回去', enemyFormation: ['雾兽幼崽', '雾兽头领', '雾兽幼崽', '雾影幼兽', '雾影幼兽', '雾影幼兽', null, '雾声引路兽', null], combatBudget: 3, level: 3, ticketReward: 10 },
+  { id: 'old_road_1', name: '旧驿道巡灯', enemyFormation: ['失控灯偶', '守灯傀儡', '失控灯偶', '巡路灯偶', '失控灯偶', '巡路灯偶', '残火灯偶', '引雾灯偶', '残火灯偶'], combatBudget: 3, level: 5, ticketReward: 0 },
+].map((stage) => ({ ...stage, enemyNames: stage.enemyFormation.filter(Boolean) }));
 export const MAX_EQUIPMENT = 1000;
 
 const PROLOGUE_STAGE_REQUIREMENTS = {
@@ -550,14 +550,14 @@ function unitFromCharacter(character, owned, team, position, equipmentItems = []
   };
 }
 
-function enemyUnit(name, level, position, healthScale = 1, formationRank = 'front') {
+function enemyUnit(name, level, position, healthScale = 1, attackScale = 1, formationRank = 'front', formationCell = 0) {
   const boss = name.includes('头领') || name.includes('傀儡');
   const hp = Math.round((boss ? 1450 : 760) * (1 + level * 0.18) * healthScale);
   return {
     id: `enemy_${position}`, characterId: `enemy_${position}`, name, team: 'enemy', position,
-    formationRank, formationRow: { front: '前排', middle: '中排', back: '后排' }[formationRank],
+    formationRank, formationCell, formationRow: { front: '前排', middle: '中排', back: '后排' }[formationRank],
     template: boss ? 'T' : 'A', role: boss ? '首领' : '敌人', maxHp: hp, hp,
-    attack: Math.round((boss ? 92 : 70) * (1 + level * 0.12)), defense: Math.round((boss ? 72 : 48) * (1 + level * 0.08)),
+    attack: Math.round((boss ? 92 : 70) * (1 + level * 0.12) * attackScale), defense: Math.round((boss ? 72 : 48) * (1 + level * 0.08)),
     speed: boss ? 970 : 990 + position * 5, gauge: 0, energy: 30, cooldown: 0, shield: 0, dots: [], attackBuff: 0,
     damageReduction: 0, alive: true,
   };
@@ -591,8 +591,10 @@ export function startBattle(save, content, stageId, { repeat = false, repeatSess
     return applyFormationBonus(unitFromCharacter(content.characters.find((c) => c.id === id), save.owned[id], 'player', i + 1, items), formation.indexOf(id));
   });
   const healthScale = stageId === 'prologue_1' ? 0.55 : stageId.startsWith('prologue_') ? 0.7 : 1;
-  const enemyRanks = stage.enemyNames.length === 1 ? ['front'] : stage.enemyNames.length === 2 ? ['front', 'middle'] : ENEMY_RANKS;
-  const enemies = stage.enemyNames.map((name, i) => enemyUnit(name, stage.level, i + 1, healthScale, enemyRanks[i % enemyRanks.length]));
+  const squadScale = Math.min(1, stage.combatBudget / stage.enemyNames.length);
+  const enemies = stage.enemyFormation.flatMap((name, cell) => name ? [enemyUnit(
+    name, stage.level, cell + 1, healthScale * squadScale, squadScale, ENEMY_RANKS[Math.floor(cell / 3)], cell,
+  )] : []);
   save.battle = {
     id: crypto.randomUUID(), stageId, stageName: stage.name, seed: save.rngState, status: 'active', actionCount: 0,
     balance: { ...BATTLE_BALANCE },
