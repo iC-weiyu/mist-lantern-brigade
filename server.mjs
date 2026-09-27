@@ -8,6 +8,7 @@ import { freeRecruitStatus, claimFreeRecruit } from './src/free-recruit.mjs';
 import { protagonistSummary, setProtagonistName } from './src/protagonist.mjs';
 import { ensureFormation, setFormation } from './src/formation.mjs';
 import { setTestResources, grantTestCharacter } from './src/test-workbench.mjs';
+import { validateWishSelection } from './src/character-state.mjs';
 import {
   createSave, performGacha, startBattle, stepBattle, enableRepeatSession, pauseBattle, resumeBattle, stopAfterBattle, abandonBattle, suspendInterruptedBattle, levelUp, breakthrough, recycleDupe,
   chooseSelector, buySelector, viewCollectionEntry, validateImportedSave, idempotent, TUTORIAL_STAGES,
@@ -110,7 +111,7 @@ async function api(req, res, url) {
       case 'story_skip': return finishStoryScene(save, content, input.sceneId, true);
       case 'set_wishes': {
         const key = input.pool === 'beginner' ? 'beginnerWishes' : 'commonWishes';
-        save.gacha[key] = input.wishes.slice(0, 3).map((id) => id || ''); return { wishes: save.gacha[key] };
+        save.gacha[key] = validateWishSelection(content, input.pool, input.wishes); return { wishes: save.gacha[key] };
       }
       case 'set_past_mode': save.gacha.pastMode = Boolean(input.value); return { pastMode: save.gacha.pastMode };
       case 'gacha': {
@@ -133,7 +134,7 @@ async function api(req, res, url) {
       case 'level_up': return levelUp(save, input.characterId);
       case 'breakthrough': return { breakthrough: breakthrough(save, input.characterId) };
       case 'recycle': return { shards: recycleDupe(save, input.characterId, content) };
-      case 'buy_selector': buySelector(save, input.kind); return { kind: input.kind };
+      case 'buy_selector': buySelector(save, input.kind, content); return { kind: input.kind };
       case 'choose_selector': chooseSelector(save, input.characterId, input.kind, content); return { characterId: input.characterId };
       case 'collection_viewed': return viewCollectionEntry(save, input.characterId, content);
       case 'battle_start': {

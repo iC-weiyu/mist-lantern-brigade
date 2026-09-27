@@ -19,18 +19,18 @@ function unlockFirstBattle(save) {
 }
 
 test('content registry contains the complete first-version roster', () => {
-  assert.equal(content.characters.filter((c) => c.rarity === 'SSR').length, 42);
+  assert.equal(content.characters.filter((c) => c.rarity === 'SSR').length, 34);
   assert.equal(content.characters.filter((c) => c.rarity === 'R').length, 72);
-  assert.equal(content.characters.filter((c) => c.rarity === 'SR').length, 48);
+  assert.equal(content.characters.filter((c) => c.rarity === 'SR').length, 56);
   assert.equal(content.characters.length, 162);
-  assert.equal(content.characters.filter((c) => c.pool === 'standard').length, 30);
+  assert.equal(content.characters.filter((c) => c.pool === 'standard').length, 22);
   assert.equal(content.characters.filter((c) => c.pool === 'past').length, 9);
   assert.equal(content.characters.filter((c) => c.pool === 'current').length, 3);
   assert.equal(content.equipmentSets.length, 12);
 });
 
 test('SSR display names, aliases, memory notes, and card summaries are applied by stable ID', () => {
-  const ssr = content.characters.filter((character) => character.rarity === 'SSR');
+  const ssr = content.characters.filter((character) => character.baseRarity === 'SSR');
   assert.equal(ssr.filter((character) => character.oldName !== character.name).length, 38);
   assert.equal(content.characters.find((character) => character.id === 'C01').name, '温照');
   assert.deepEqual(content.characters.find((character) => character.id === 'C01').aliases, ['艾琳']);
@@ -169,14 +169,18 @@ test('battle supports focus and strategy as explicit next-decision inputs', () =
   assert.equal(save.battle.strategy, 'survive');
 });
 
-test('low-rarity duplicate recycling follows R 10 and SR 40 dust values', () => {
+test('all duplicate recycling uses contract shards and leaves equipment dust unchanged', () => {
   const save = createSave(content);
   save.owned.L03.dupes = 1;
   save.owned.L01.dupes = 1;
+  save.owned.C01 = { level: 1, breakthrough: 0, dupes: 1, investedXp: 0, investedCoins: 0 };
+  const dust = save.currencies.equipmentDust;
   recycleDupe(save, 'L03', content);
-  assert.equal(save.currencies.equipmentDust, 90);
+  assert.equal(save.currencies.contractShards, 2);
   recycleDupe(save, 'L01', content);
-  assert.equal(save.currencies.equipmentDust, 130);
+  recycleDupe(save, 'C01', content);
+  assert.equal(save.currencies.contractShards, 112);
+  assert.equal(save.currencies.equipmentDust, dust);
 });
 
 test('equipped main stats are applied to the next battle snapshot', () => {
